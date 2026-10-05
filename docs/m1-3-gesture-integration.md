@@ -45,3 +45,13 @@
 ## 风险与回退
 - **张掌护盾与施放张掌冲突**（FSM 的 PALM 既是施放确认又是护盾）：靠状态区分——FSM 非 IDLE 时的张掌=施放，IDLE 持续张掌=护盾；若实测误触发多，改为"握拳→张掌保持 0.5s 后"才起盾
 - **3D 模式下 CanvasLayer 事件穿透**：准星用 `_draw` 自绘不走 Control，避免抢鼠标事件；HUD Control 设 `mouse_filter=IGNORE`
+
+## 执行记录（2026-10-05）
+
+- 手势栈接入 3D ✅：tracker/fsm/skeleton/trail/DebugHud 全部挂战场 CanvasLayer；摄像头走离屏 SubViewport（modulate 全透明，只喂识别不上屏）
+- 施法路由 ✅：cast_performed → spell_caster.cast(spell_id, anchor×视口)；掌心火弹 → 自动瞄准；fizzle 提示复用
+- 护盾 ✅：`shield_3d.gd`（相机前 1.1m 半球 r1.6，呼吸微动+受击闪白）；触发=右键 或 空闲张掌≥0.3s；耗蓝 12/s；空蓝破碎提示；进入施法状态立即撤盾（不与画符抢手势）
+- 法力 ✅：battlefield.mana_ratio → HUD 蓝条；键盘 1-5 直放不变
+- 鼠标兜底完整路径与 2D 同构（左键=聚气/画符，右键=护盾）
+- 测试 ✅ battle3d 16/16（新增护盾格挡断言，加 shield_force 测试钩子防主循环覆盖）；smoke 14/14、e2e 35/35 回归绿；带窗口零脚本错误
+- 手势冲突处理按预案：FSM 非 IDLE 时的张掌=施放确认，IDLE 持续张掌=护盾

@@ -8,17 +8,19 @@ signal hands_updated(hands: Array)
 signal tracker_message(msg: String)
 
 const MODEL_PATH := "res://models/hand_landmarker.task"
-const MAX_HANDS := 2
+const MAX_HANDS := 2  # 默认；可用 --max-hands=N 覆盖（Pi 4 等弱机建议 1，游戏逻辑只消费第一只手）
 
 var latency_ms := 0.0  # 摄像头帧事件 → 识别回调 的端到端延迟（EMA）
 var flip_h := true  # 前置摄像头镜像显示（自拍视角）
 
 # 诊断计数（--camera-test 用）
 var frames_sent := 0
+var frames_dropped := 0  # 上一帧还没识别完就到来的摄像头帧（弱机上主动丢弃，防止排队延迟膨胀）
 var results_received := 0
 var hands_frames := 0
 
 var _task: MediaPipeHandLandmarker
+var _max_hands := MAX_HANDS
 var _feed  # 注意：不能标注 CameraFeed 类型——CameraFeedExtension 上转型后 get_formats/set_format 失效（插件已知问题）
 var _camera_extension  # Windows: CameraServerExtension（Media Foundation 后端）
 var _cam_texture_rect: TextureRect
@@ -37,6 +39,11 @@ func setup(viewport: SubViewport, texture_rect: TextureRect) -> void:
 
 
 func _init_task() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--max-hands="):
+			var n := int(arg.substr("--max-hands=".length()))
+			if n >= 1 and n <= MAX_HANDS:
+				_max_hands = n
 	var file := FileAccess.open(MODEL_PATH, FileAccess.READ)
 	if file == null:
 		tracker_message.emit("模型文件缺失: %s" % MODEL_PATH)
@@ -45,10 +52,10 @@ func _init_task() -> void:
 	base_options.delegate = MediaPipeTaskBaseOptions.DELEGATE_CPU  # Windows 不支持 GPU delegate
 	base_options.model_asset_buffer = file.get_buffer(file.get_length())
 	_task = MediaPipeHandLandmarker.new()
-	# num_hands=2, 置信度 0.5（GDD §3.3 可调）
+	# num_hands（GDD §3.3 可调，Pi 4 建议 --max-hands=1）, 置信度 0.5
 	var ok: bool = _task.initialize(
 		base_options, MediaPipeVisionTask.RUNNING_MODE_LIVE_STREAM,
-		MAX_HANDS, 0.5, 0.5, 0.5
+		_max_hands, 0.5, 0.5, 0.5
 	)
 	if not ok:
 		tracker_message.emit("HandLandmarker 初始化失败")
@@ -172,6 +179,10 @@ func _setup_camera_texture() -> void:
 func _on_frame_changed() -> void:
 	if _viewport == null or _task == null:
 		return
+	# 在途节流：最多 1 帧推理在跑（快机上无感，Pi 4 上把排队延迟钉在单次推理时长内）
+	if frames_sent - results_received >= 1:
+		frames_dropped += 1
+		return
 	_frame_t0 = Time.get_ticks_msec()
 	await RenderingServer.frame_post_draw
 	if _viewport == null:
@@ -228,6 +239,7 @@ func diagnostics() -> Dictionary:
 		"camera": _feed.get_name() if _feed != null else "",
 		"datatype": _feed.get_datatype() if _feed != null else -1,
 		"frames_sent": frames_sent,
+		"frames_dropped": frames_dropped,
 		"results_received": results_received,
 		"hands_frames": hands_frames,
 		"latency_ms": latency_ms,

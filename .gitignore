@@ -7,3 +7,7 @@ downloads/
 
 # Local agent workspace
 .zcode/
+
+# Godot crash temp files
+~*.TMP
+*.tmp

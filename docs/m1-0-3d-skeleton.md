@@ -1,6 +1,7 @@
 # M1.0 实施文档：3D 骨架
 
 > 前置：无（M1 起点）。产出：能跑的 3D 场景 + 会播动画的敌人模型。
+> **状态：✅ 完成（2026-10-05）**。执行记录见文末。
 
 ## 目标
 
@@ -50,3 +51,13 @@
 - **Forward+ 下 GLB 材质异常**（如自发光过曝）：调 `Environment` tonemap/tone_mapping 为 Filmic 或降能量；最坏切回 GL Compatibility（代码无 Forward+ 硬依赖，只损失泛光）
 - **headless import 段错误**（已知 GDMP 噪音）：重跑一次 import；不影响缓存
 - **动画名对不上**：已预检 GLB JSON 确认 `marine_idle/move/attack` 存在；若 Godot 导入后名字带路径前缀，用 `get_animation_list()` 打印实际名再适配
+
+## 执行记录（2026-10-05）
+
+- 素材拷贝 + `.gdignore` ✅（素材包零导入，`assets3d/` 9 个 GLB 已生成 .import）
+- Forward+ 切换 ✅（RTX 4060 Ti，Vulkan 1.4）
+- `battlefield_3d.gd` ✅：程序化天空+Filmic+泛光、平行光阴影、160m 草地、城堡布景（指挥中心身后大本营，地堡/导弹塔前移至两翼中景——首版放身后画面外不可见，目检后调整）、26 件固定种子环境点缀
+- `--anim-probe` ✅ PASS：marine idle 2.0s/move 0.67s/attack 1.5s（25 轨道）、marauder idle 2.0s/move 0.83s/attack 0.58s（48 轨道），全部可播
+- 截图目检 ✅：`--shot3d` 输出 1280×960，AI 视觉复核通过（建筑可见/比例合理/贴地/构图成立）
+- 回归：smoke 14/14 ✅、game 9/9 ✅、e2e 34/35（唯一 FAIL 为"识别单次耗时 26-37ms>12ms"微基准——A/B 切回 gl_compatibility 复测同样失败，且本机 Blender 双进程占用中，判定为环境负载抖动非代码回归；功能项全过）
+- 布局调整记录：城堡首版放 z=17~26（相机身后）画面全空 → 地堡/导弹塔前移 (±11,-2)/(±16,-8)

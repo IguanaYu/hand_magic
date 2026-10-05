@@ -4,6 +4,9 @@ extends Node2D
 ## --e2e-test = 练习靶模式（测试用）；--anim-probe = GLB 动画资产验证。
 ## 快捷键：F1 切 HUD / R 重开 / ESC 退出 / 无摄像头时鼠标兜底。
 
+## 调试期：法力免费（用户要求，测试手感不受蓝条限制；正式版改 false）
+const MANA_FREE := true
+
 
 const TARGET_SLOTS := [
 	Vector2(0.25, 0.28), Vector2(0.75, 0.28),
@@ -32,6 +35,7 @@ var _mouse_fallback_note := false
 var _no_camera_t := 0.0
 var _mouse_down_pos := Vector2.ZERO
 var _mouse_was_down := false
+var _shield_hold_t := 0.0
 var _overlay: ColorRect
 var _overlay_label: Label
 var _overlay_layer: CanvasLayer
@@ -110,7 +114,21 @@ func _ready() -> void:
 		return
 	if "--shot3d" in args:
 		_build_3d()
-		get_tree().create_timer(1.5).timeout.connect(_take_3d_shot)
+		# 预置敌人在镜头前，用于目检模型/朝向/动画
+		for i in 7:
+			var key := "marauder" if i % 3 == 2 else "marine"
+			var e := battle3d.spawn_enemy(key)
+			e.global_position = battle3d.PLAYER_POS + Vector3(-12.0 + i * 4.0, 0.0, -13.0 - (i % 3) * 3.0)
+		# 0.7s 施放火球，1.55s 截图（爆炸瞬间 + 敌人已开火）
+		get_tree().create_timer(0.7).timeout.connect(func():
+			battle3d.spell_caster.cast("fireball", Vector2(640, 520)))
+		get_tree().create_timer(1.55).timeout.connect(_take_3d_shot)
+		return
+	if "--battle3d-test" in args:
+		_build_3d()
+		var bt: Node = load("res://tests/battle3d_test.gd").new()
+		bt.battlefield = battle3d
+		add_child(bt)
 		return
 	_gui_test = "--gui-test" in args
 	# 默认 = 3D 战场；--ward = 旧守卫法阵（M0.5）；e2e/practice 走练习靶
@@ -126,9 +144,66 @@ func _build_3d() -> void:
 	battle3d = Battlefield3D.new()
 	battle3d.name = "Battlefield3D"
 	add_child(battle3d)
+	# 摄像头管线：离屏 SubViewport（modulate 全透明——只供手部追踪读帧，不上屏）
+	_cam_container = SubViewportContainer.new()
+	_cam_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cam_container.stretch = true
+	_cam_container.modulate = Color(1, 1, 1, 0)
+	add_child(_cam_container)
+	_cam_viewport = SubViewport.new()
+	_cam_viewport.size = Vector2i(640, 480)
+	_cam_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_cam_container.add_child(_cam_viewport)
+	_cam_texture = TextureRect.new()
+	_cam_texture.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cam_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_cam_texture.flip_h = true
+	_cam_viewport.add_child(_cam_texture)
+	# 手势渲染层 + 调试 HUD（挂在战场 CanvasLayer 上，叠在 3D 画面之上）
+	trail = TrailRenderer.new()
+	battle3d.ui_layer.add_child(trail)
+	skeleton = SkeletonRenderer.new()
+	battle3d.ui_layer.add_child(skeleton)
 	hud = DebugHud.new()
 	battle3d.ui_layer.add_child(hud)
-	hud.set_hint("M1 3D 战场开发中 | ESC 退出 F1 HUD")
+	hud.set_hint("握拳→画符→张掌 施法 | 空闲张掌/右键 护盾 | 1-5 直放法术 | R 重开 ESC 退出")
+	tracker = HandTracker.new()
+	add_child(tracker)
+	fsm = GestureFSM.new()
+	add_child(fsm)
+	_wire_3d_signals()
+
+
+func _wire_3d_signals() -> void:
+	tracker.hands_updated.connect(_on_hands_updated)
+	tracker.tracker_message.connect(func(msg): hud.set_message(msg))
+	fsm.drawing_updated.connect(func(pts): trail.set_points(pts))
+	fsm.cast_performed.connect(_on_3d_cast)
+	fsm.quick_shot_performed.connect(_on_3d_quick_shot)
+	fsm.fizzle.connect(_on_fizzle)
+	# 清波奖励：回 30 法力（波间喘息）
+	battle3d.wave_cleared.connect(func(_n):
+		if fsm != null:
+			fsm.mana = minf(GestureFSM.MANA_MAX, fsm.mana + 30.0))
+	tracker.setup(_cam_viewport, _cam_texture)
+
+
+func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
+	trail.begin_fade()
+	var vp := _view_size()
+	battle3d.spell_caster.cast(spell_id, Vector2(anchor.x * vp.x, anchor.y * vp.y))
+
+
+func _on_3d_quick_shot(_anchor: Vector2) -> void:
+	battle3d.spell_caster.cast("quick_shot", Vector2.ZERO)
+	hud.set_message("掌心火弹！")
+
+
+func _view_size() -> Vector2:
+	var vp := get_viewport_rect().size
+	if vp.x < 100.0:
+		vp = Vector2(1280, 960)  # headless 回退
+	return vp
 
 
 func _build_scene() -> void:
@@ -286,7 +361,8 @@ func _on_fizzle(reason: String) -> void:
 
 func _process(delta: float) -> void:
 	if mode3d:
-		return  # 3D 模式逻辑在 battlefield_3d 内（手势层 M1.3 接入）
+		_process_3d(delta)
+		return
 	if ward == null:
 		return  # 探针等未完整构建的模式
 	var vp := get_viewport_rect().size
@@ -371,6 +447,90 @@ func _state_color() -> Color:
 		_: return Color(0.6, 0.85, 1.0, 0.55)
 
 
+## M1.3：3D 模式的手势主循环（与 2D 版同构：姿势判定 → FSM → 渲染同步 → 护盾/法力）
+func _process_3d(delta: float) -> void:
+	var vp := _view_size()
+	skeleton.view_size = vp
+	trail.view_size = vp
+
+	var pose := PoseClassifier.Pose.NONE
+	var hand_present := false
+	var index_tip := Vector2.ZERO
+	var anchor := Vector2(0.5, 0.5)
+
+	if _latest_hands.size() > 0:
+		var hand: Dictionary = _latest_hands[0]
+		hand_present = true
+		pose = pose_classifier.classify(hand.get("points", []))
+		index_tip = hand.get("index_tip", Vector2.ZERO)
+		anchor = hand.get("palm", Vector2(0.5, 0.5))
+	else:
+		pose_classifier.reset()
+		# 鼠标兜底：左键=聚气/画符，右键=护盾
+		var down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		var m := get_viewport().get_mouse_position() / vp
+		if down and not _mouse_was_down:
+			_mouse_down_pos = m
+		_mouse_was_down = down
+		if down:
+			hand_present = true
+			if fsm.state == GestureFSM.State.IDLE:
+				pose = PoseClassifier.Pose.FIST
+			elif fsm.state == GestureFSM.State.CHARGE and (m - _mouse_down_pos).length() < 0.015:
+				pose = PoseClassifier.Pose.FIST
+			else:
+				pose = PoseClassifier.Pose.DRAWING
+			index_tip = m
+			anchor = m
+		elif fsm.state == GestureFSM.State.DRAWING:
+			hand_present = true
+			pose = PoseClassifier.Pose.PALM
+			index_tip = m
+			anchor = m
+		elif fsm.state == GestureFSM.State.CHARGE:
+			hand_present = true
+			pose = PoseClassifier.Pose.PALM
+			index_tip = m
+			anchor = m
+
+	fsm.update(pose, hand_present, index_tip, anchor, delta)
+	if MANA_FREE:
+		fsm.mana = GestureFSM.MANA_MAX  # 调试期法力免费
+	skeleton.set_hands(_latest_hands)
+	skeleton.state_color = _state_color()
+
+	# 护盾：空闲持续张掌 ≥0.3s 或按住右键；进入施法状态立即撤盾
+	var shield_want := false
+	if not battle3d.is_over:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			shield_want = true
+		elif pose == PoseClassifier.Pose.PALM and fsm.state == GestureFSM.State.IDLE:
+			_shield_hold_t += delta
+			if _shield_hold_t >= 0.3:
+				shield_want = true
+		else:
+			_shield_hold_t = 0.0
+	if fsm.state != GestureFSM.State.IDLE:
+		_shield_hold_t = 0.0
+		shield_want = false
+	if shield_want and fsm.mana > 1.0:
+		battle3d.shield_up = true
+		fsm.mana = maxf(0.0, fsm.mana - 12.0 * delta)
+		if fsm.mana <= 0.0:
+			battle3d.shield_up = false
+			hud.set_message("法力耗尽，护盾破碎！")
+	else:
+		battle3d.shield_up = false
+	battle3d.mana_ratio = fsm.mana / GestureFSM.MANA_MAX
+
+	if not _camera_alive:
+		_no_camera_t += delta
+		if _no_camera_t > 4.0 and not _mouse_fallback_note:
+			_mouse_fallback_note = true
+			hud.set_message("未检测到摄像头——鼠标兜底：按住画符施法，右键护盾")
+	_update_hud(delta)
+
+
 func _update_hud(_delta: float) -> void:
 	var last := fsm.last_result
 	var info := {
@@ -382,8 +542,13 @@ func _update_hud(_delta: float) -> void:
 		"法力": "%.0f" % fsm.mana,
 		"识别": "%s (%.2f)" % [GestureFSM.SPELL_NAME.get(str(last.get("name", "")), last.get("name", "—")), float(last.get("score", 0.0))],
 		"施放/失败": "%d / %d" % [fsm.cast_count, fsm.fizzle_count],
-		"命中": "%d" % spell_manager.hit_total,
 	}
+	if spell_manager != null:
+		info["命中"] = "%d" % spell_manager.hit_total
+	if battle3d != null:
+		info["HP"] = "%.0f" % battle3d.player_hp
+		info["得分"] = "%d（击杀 %d）" % [battle3d.score, battle3d.kills]
+		info["场上敌人"] = "%d" % battle3d._alive_count()
 	if mini_game != null:
 		info["得分"] = "%d（击杀 %d）" % [mini_game.score, mini_game.kills]
 		info["法阵"] = "%d/%d" % [mini_game.ward_hp, MiniGame.WARD_HP_MAX]
@@ -393,10 +558,25 @@ func _update_hud(_delta: float) -> void:
 
 
 func _take_3d_shot() -> void:
+	_dump_enemy_anim()
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("res://tests/shot3d.png")
 	print("SHOT3D saved ", img.get_size())
+	if "--shot3d-twice" in OS.get_cmdline_user_args():
+		await get_tree().create_timer(0.4).timeout
+		_dump_enemy_anim()
+		var img2 := get_viewport().get_texture().get_image()
+		img2.save_png("res://tests/shot3d_b.png")
+		print("SHOT3D_B saved")
 	get_tree().quit(0)
+
+
+func _dump_enemy_anim() -> void:
+	for e in battle3d.enemies:
+		var ap: AnimationPlayer = e._ap
+		if ap != null:
+			print("ENEMY ", e.unit_key, " state=", e.state_name(), " anim=", ap.current_animation,
+				" pos=", "%.3f" % ap.current_animation_position, " playing=", ap.is_playing())
 
 
 func _finish_camera_test() -> void:
@@ -405,6 +585,7 @@ func _finish_camera_test() -> void:
 		"camera=" + str(d.get("camera", "")),
 		"datatype=" + str(d.get("datatype", -1)),
 		"frames_sent=%d" % d.get("frames_sent", 0),
+		"frames_dropped=%d" % d.get("frames_dropped", 0),
 		"results_received=%d" % d.get("results_received", 0),
 		"hands_frames=%d" % d.get("hands_frames", 0),
 		"latency_ms=%.1f" % d.get("latency_ms", 0.0),
@@ -454,6 +635,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_R:
 				if battle3d != null:
 					battle3d.restart()
+					if fsm != null:
+						fsm.reset()
 					hud.set_message("重新开始！")
 				elif mini_game != null:
 					mini_game.restart()
