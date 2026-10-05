@@ -1,6 +1,6 @@
 class_name DamageLabel
 extends Label
-## M1.2 伤害飘字：3D 世界坐标投影到屏幕，上浮淡出 0.7s。
+## M1.6 伤害飘字：3D 世界坐标投影到屏幕，弹出缩放 + 上浮淡出 0.7s。
 
 var world_pos := Vector3.ZERO
 var camera: Camera3D
@@ -26,6 +26,9 @@ func _process(delta: float) -> void:
 	else:
 		visible = true
 		position = camera.unproject_position(wp) - size * 0.5
+		pivot_offset = size * 0.5
+		# 出现瞬间放大弹出，快速回落到原尺寸
+		scale = Vector2.ONE * (1.0 + 0.4 * clampf(1.0 - t / 0.14, 0.0, 1.0))
 	modulate.a = clampf(1.0 - t / 0.7, 0.0, 1.0)
 	if t > 0.7:
 		queue_free()

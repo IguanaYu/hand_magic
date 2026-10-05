@@ -43,5 +43,5 @@
 [PASS] 取消: 张掌保持500ms回到待机
 [PASS] 超时: 2.5s自动FIZZLE
 [PASS] 超时: 失败不施放
-[PASS] 性能: 识别单次耗时 9.16ms (阈值12ms)
-recognize_avg_ms=9.16
+[PASS] 性能: 识别单次耗时 8.62ms (阈值12ms)
+recognize_avg_ms=8.62

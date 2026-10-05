@@ -1,7 +1,7 @@
 class_name Battlefield3D
 extends Node3D
-## M1.0 3D 战场骨架：地面/天空/光照/相机站位/城堡布景/环境点缀。
-## 后续里程碑在此扩展：敌人层(M1.1) 战斗(M1.2) 手势(M1.3) 波次(M1.4)。
+## M1.6 3D 战场：环境（噪声草地/线性雾/远景岩环/阵地布景）+ 波次刷怪
+## （地面小队编队进场 + 维京战机盘旋 + 医疗船空投）+ 命中反馈（顿帧/音效/焦痕/尘土）。
 
 const PLAYER_POS := Vector3(0.0, 1.65, 8.0)
 const GROUND_SIZE := 160.0
@@ -14,11 +14,18 @@ const PATH_UNITS := "res://assets3d/units/%s.glb"
 const PATH_BUILDINGS := "res://assets3d/buildings/%s.glb"
 const PATH_ENV := "res://assets3d/env/%s.glb"
 
-## 自由刷怪（M1.4 换波次表）
 const SPAWN_INTERVAL := 2.5
 const MAX_ALIVE := 20
 const FIRST_WAVE_DELAY := 3.0
 const WAVE_CLEAR_BONUS := 50
+## 地面小队规模区间（同队同侧同集结点，成纵队进场）
+const SQUAD_MIN := 3
+const SQUAD_SPREAD := 3
+## 同名音效最小间隔（ms），防止叠爆音
+const SFX_GAP := {
+	"shoot": 50, "shoot_big": 80, "hit": 45, "thump": 70,
+	"boom": 60, "boom_big": 90, "flyby": 200, "zap": 60,
+}
 
 signal wave_started(n: int)
 signal wave_cleared(n: int)
@@ -32,6 +39,7 @@ var bullet_layer: Node3D
 var fx_layer: Node3D
 var hud3d: BattleHud
 var crosshair: Crosshair
+var spell_bar: SpellBar
 var spell_caster: SpellCaster3D
 var shield: Shield3D
 
@@ -50,6 +58,8 @@ var mana_ratio := 0.0:
 		mana_ratio = v
 		if hud3d != null:
 			hud3d.mana_ratio = v
+		if spell_bar != null:
+			spell_bar.mana = v * GestureFSM.MANA_MAX
 
 var _spawn_acc := 0.0
 var _spawn_count := 0
@@ -59,18 +69,30 @@ var _overlay_label: Label
 var _banner: Label
 var _shake_t := 0.0
 
-# 波次状态（M1.4）
+# 波次状态
 var wave_n := 0
 var phase: WavePhase = WavePhase.INTERMISSION
 var _queue: Array[String] = []
 var _phase_t := FIRST_WAVE_DELAY
 var _spawn_interval := SPAWN_INTERVAL
 var best_score := 0
+var _drops_per_medivac := 4
 
-const SPELL_KEYS := {
-	KEY_1: "fireball", KEY_2: "lightning", KEY_3: "ice_field",
-	KEY_4: "wind_blade", KEY_5: "quick_shot",
-}
+# 小队刷怪状态
+var _squad_side := 1.0
+var _squad_left := 0
+var _squad_idx := 0
+var _squad_lane := Vector3.ZERO
+var _squad_waypoint := Vector3.ZERO
+var _air_warned := {"viking": false, "medivac": false}
+
+# 音效池 + 击杀顿帧
+var _sfx_pool: Array[AudioStreamPlayer3D] = []
+var _sfx_cursor := 0
+var _sfx_last := {}
+var _hitstop_cd := 0.0
+
+const SPELL_KEYS := SpellCodex.SPELL_KEYS  # 数字键直放法术（数据/图鉴见 spell_codex.gd）
 
 
 func _ready() -> void:
@@ -81,10 +103,13 @@ func _ready() -> void:
 	_scatter_props()
 	_build_layers()
 	_setup_camera()
+	_build_sfx_pool()
 	hud3d = BattleHud.new()
 	ui_layer.add_child(hud3d)
 	crosshair = Crosshair.new()
 	ui_layer.add_child(crosshair)
+	spell_bar = SpellBar.new()
+	ui_layer.add_child(spell_bar)
 	spell_caster = SpellCaster3D.new()
 	spell_caster.battlefield = self
 	add_child(spell_caster)
@@ -101,6 +126,7 @@ func _process(delta: float) -> void:
 		_update_waves(delta)
 	_refresh_hud()
 	_update_camera(delta)
+	_hitstop_cd = maxf(0.0, _hitstop_cd - delta)
 	crosshair.on_enemy = spell_caster.scan_enemy(get_viewport().get_mouse_position()) != null
 	shield.active = (shield_up or shield_force) and not is_over
 	# 护盾挡弹
@@ -108,10 +134,50 @@ func _process(delta: float) -> void:
 		for b in bullet_layer.get_children():
 			if b is EnemyBullet3D and shield.blocks(b.global_position):
 				shield.flash()
+				play_sfx("shield", b.global_position, -6.0)
 				b.queue_free()
 
 
-# ---------- 波次状态机（M1.4） ----------
+# ---------- 音效池（3D 空间声，同名限频） ----------
+
+func _build_sfx_pool() -> void:
+	for i in 14:
+		var p := AudioStreamPlayer3D.new()
+		p.unit_size = 12.0
+		p.max_distance = 120.0
+		add_child(p)
+		_sfx_pool.append(p)
+
+
+func play_sfx(key: String, pos := Vector3.INF, vol_db := 0.0) -> void:
+	var now := Time.get_ticks_msec()
+	if now - int(_sfx_last.get(key, -9999)) < int(SFX_GAP.get(key, 30)):
+		return
+	_sfx_last[key] = now
+	var wav := SfxKit.stream(key)
+	if wav.data.is_empty():
+		return
+	var p := _sfx_pool[_sfx_cursor]
+	_sfx_cursor = (_sfx_cursor + 1) % _sfx_pool.size()
+	p.stream = wav
+	p.volume_db = vol_db
+	p.pitch_scale = 1.0 + randf_range(-0.05, 0.05)
+	p.global_position = camera.global_position if pos == Vector3.INF else pos
+	p.play()
+
+
+# ---------- 击杀顿帧（hitstop） ----------
+
+func hitstop() -> void:
+	if _hitstop_cd > 0.0 or is_over:
+		return
+	_hitstop_cd = 0.5
+	Engine.time_scale = 0.3
+	await get_tree().create_timer(0.05, true, false, true).timeout
+	Engine.time_scale = 1.0
+
+
+# ---------- 波次状态机 ----------
 
 func _update_waves(delta: float) -> void:
 	match phase:
@@ -139,16 +205,30 @@ func _start_wave() -> void:
 	wave_n += 1
 	var w := WaveTable.wave(wave_n)
 	_spawn_interval = w["spawn_interval"]
+	_drops_per_medivac = int(w.get("drops", 4))
+	_air_warned = {"viking": false, "medivac": false}
 	_queue.clear()
 	for i in int(w["marines"]):
 		_queue.append("marine")
 	for i in int(w["marauders"]):
 		_queue.append("marauder")
+	for i in int(w.get("vikings", 0)):
+		_queue.append("viking")
+	for i in int(w.get("medivacs", 0)):
+		_queue.append("medivac")
 	_queue.shuffle()
 	_spawn_acc = _spawn_interval  # 立即出第一只
 	phase = WavePhase.SPAWNING
 	wave_started.emit(wave_n)
-	_show_banner("第 %d 波来袭！（枪兵×%d 掠夺者×%d）" % [wave_n, w["marines"], w["marauders"]])
+	play_sfx("chime")
+	var parts: Array[String] = ["第 %d 波来袭！" % wave_n]
+	if int(w["marines"]) + int(w["marauders"]) > 0:
+		parts.append("步兵×%d" % (int(w["marines"]) + int(w["marauders"])))
+	if int(w.get("vikings", 0)) > 0:
+		parts.append("维京×%d" % int(w["vikings"]))
+	if int(w.get("medivacs", 0)) > 0:
+		parts.append("运输机×%d" % int(w["medivacs"]))
+	_show_banner("　".join(parts))
 
 
 func _show_banner(text: String) -> void:
@@ -178,6 +258,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and SPELL_KEYS.has(event.keycode):
 		spell_caster.cast(SPELL_KEYS[event.keycode], get_viewport().get_mouse_position())
+		spell_bar.flash(event.keycode)
 
 
 func _update_camera(delta: float) -> void:
@@ -186,12 +267,12 @@ func _update_camera(delta: float) -> void:
 		var amp := 0.09 * (_shake_t / 0.25)
 		camera.position = PLAYER_POS + Vector3(randf_range(-amp, amp), randf_range(-amp, amp), 0.0)
 	else:
-		# 呼吸感微摆（M1.5）
+		# 呼吸感微摆
 		var t := Time.get_ticks_msec() / 1000.0
 		camera.position = PLAYER_POS + Vector3(sin(t * 0.8) * 0.02, sin(t * 1.3) * 0.015, 0.0)
 
 
-# ---------- 枪口火光（M1.5） ----------
+# ---------- 枪口火光 ----------
 
 func muzzle_flash(pos: Vector3, big: bool) -> void:
 	var mi := MeshInstance3D.new()
@@ -239,11 +320,15 @@ func restart() -> void:
 	phase = WavePhase.INTERMISSION
 	_phase_t = FIRST_WAVE_DELAY
 	_queue.clear()
+	_squad_left = 0
+	_squad_idx = 0
+	_air_warned = {"viking": false, "medivac": false}
+	Engine.time_scale = 1.0
 	_overlay.visible = false
 	_show_banner("守住阵地！")
 
 
-# ---------- 玩家受击（M1.2） ----------
+# ---------- 玩家受击 ----------
 
 func player_hit(dmg: float) -> void:
 	if is_over:
@@ -253,6 +338,7 @@ func player_hit(dmg: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(_flash, "color:a", 0.0, 0.35)
 	_shake_t = maxf(_shake_t, 0.25)
+	play_sfx("thump", Vector3.INF, -4.0)
 	if player_hp <= 0.0:
 		_game_over()
 
@@ -260,7 +346,9 @@ func player_hit(dmg: float) -> void:
 func _game_over() -> void:
 	is_over = true
 	spawning = false
+	Engine.time_scale = 1.0
 	_save_best()
+	play_sfx("lose")
 	_overlay.visible = true
 	_overlay_label.text = "阵亡！\n\n到达 第 %d 波　得分 %d　击杀 %d\n最佳 %d\n\n按 R 重新开始" % [wave_n, score, kills, best_score]
 
@@ -269,9 +357,9 @@ func _game_over() -> void:
 
 func spawn_bullet(from: Vector3, target: Vector3, dmg: float, speed: float, big: bool) -> void:
 	var b := EnemyBullet3D.new()
+	bullet_layer.add_child(b)
 	b.setup(from, target, dmg, speed, big, PLAYER_POS)
 	b.delivered.connect(func(d): player_hit(d))
-	bullet_layer.add_child(b)
 
 
 # ---------- 伤害飘字 ----------
@@ -280,6 +368,114 @@ func spawn_damage_label(world_pos: Vector3, dmg: float, col: Color) -> void:
 	var dl := DamageLabel.new()
 	dl.setup(world_pos, camera, dmg, col)
 	ui_layer.add_child(dl)
+
+
+# ---------- 通用战场特效 ----------
+
+## 空中爆炸（飞行单位被击落瞬间）
+func air_boom(pos: Vector3) -> void:
+	var boom: SpellCaster3D.ExplosionFx = SpellCaster3D.ExplosionFx.new()
+	boom.radius = 2.8
+	boom.position = pos
+	fx_layer.add_child(boom)
+	var burst := CPUParticles3D.new()
+	burst.one_shot = true
+	burst.emitting = false
+	burst.amount = 24
+	burst.lifetime = 0.6
+	burst.explosiveness = 1.0
+	burst.direction = Vector3.UP
+	burst.spread = 180.0
+	burst.initial_velocity_min = 3.0
+	burst.initial_velocity_max = 9.0
+	burst.gravity = Vector3(0, -12.0, 0)
+	burst.scale_amount_min = 1.5
+	burst.scale_amount_max = 4.0
+	burst.color = Color(1.0, 0.55, 0.15, 0.95)
+	var pm := SphereMesh.new()
+	pm.radius = 0.07
+	pm.height = 0.14
+	burst.mesh = pm
+	burst.position = pos
+	fx_layer.add_child(burst)
+	burst.restart()
+	add_camera_shake(0.2)
+	play_sfx("boom_big", pos, -4.0)
+
+
+## 残骸落地：爆炸 + 尘土 + 焦痕 + 小范围溅射伤害（会误伤敌军）
+func ground_impact(pos: Vector3, big: bool) -> void:
+	var gpos := Vector3(pos.x, 0.0, pos.z)
+	var boom: SpellCaster3D.ExplosionFx = SpellCaster3D.ExplosionFx.new()
+	boom.radius = 2.2 if big else 1.5
+	boom.position = gpos + Vector3.UP * 0.4
+	fx_layer.add_child(boom)
+	dust_puff(gpos, big)
+	spawn_scorch(gpos, 2.0 if big else 1.4)
+	add_camera_shake(0.22 if big else 0.12)
+	play_sfx("boom_big" if big else "boom", gpos, -4.0 if big else -7.0)
+	if big:
+		for e in enemies.duplicate():
+			if e.alive and e.global_position.distance_to(gpos) <= 2.6:
+				e.take_damage(25.0)
+				spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, 25.0, Color(1.0, 0.7, 0.3))
+
+
+## 出生/落地尘土
+func dust_puff(pos: Vector3, big := false) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.emitting = false
+	p.amount = 12 if big else 7
+	p.lifetime = 0.5
+	p.explosiveness = 0.9
+	p.direction = Vector3.UP
+	p.spread = 70.0
+	p.initial_velocity_min = 1.2
+	p.initial_velocity_max = 3.0 if big else 2.0
+	p.gravity = Vector3(0, -4.0, 0)
+	p.scale_amount_min = 1.5
+	p.scale_amount_max = 3.5 if big else 2.5
+	p.color = Color(0.55, 0.47, 0.35, 0.75)
+	var pm := SphereMesh.new()
+	pm.radius = 0.09
+	pm.height = 0.18
+	p.mesh = pm
+	p.position = pos + Vector3.UP * 0.1
+	fx_layer.add_child(p)
+	p.restart()
+	get_tree().create_timer(0.9).timeout.connect(p.queue_free)
+
+
+## 地面焦痕（渐隐贴片）
+func spawn_scorch(pos: Vector3, radius: float) -> void:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(radius * 2.0, radius * 2.0)
+	mi.mesh = q
+	var gt := GradientTexture2D.new()
+	gt.width = 64
+	gt.height = 64
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(0.05, 0.04, 0.03, 0.55), Color(0.05, 0.04, 0.03, 0.0)])
+	g.offsets = PackedFloat32Array([0.3, 1.0])
+	gt.gradient = g
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_texture = gt
+	mi.material_override = mat
+	mi.rotation.x = -PI / 2.0
+	# 微小随机抬升，避免多层焦痕 z-fighting
+	mi.position = Vector3(pos.x, 0.02 + randf() * 0.02, pos.z)
+	fx_layer.add_child(mi)
+	var tw := create_tween()
+	tw.tween_interval(5.0)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 3.0)
+	tw.tween_callback(mi.queue_free)
 
 
 func _build_overlay() -> void:
@@ -322,7 +518,9 @@ func _build_overlay() -> void:
 	ui_layer.add_child(_banner)
 
 
-# ---------- 敌人生成（左右两翼弧线为主，少量正面远处） ----------
+# ---------- 敌人生成 ----------
+# 地面：小队编队（同侧纵队进场 → 共享集结点 → 压向玩家）
+# 空军：维京从场外飞入绕玩家前方半圆盘旋开火；医疗船飞到阵前上空悬停空投
 
 func spawn_enemy(key := "", with_waypoint := true) -> EnemyUnit3D:
 	if key == "":
@@ -330,16 +528,60 @@ func spawn_enemy(key := "", with_waypoint := true) -> EnemyUnit3D:
 	var e := EnemyUnit3D.new()
 	e.setup(key, PLAYER_POS)
 	e.battlefield = self
-	# 两段路径：两侧近处出生（画面边缘可见）→ 中间集结点 → 朝玩家
-	var side := -1.0 if _spawn_count % 2 == 0 else 1.0
-	e.position = Vector3(side * randf_range(20.0, 30.0), 0.0, randf_range(-14.0, -5.0))
-	if with_waypoint:
-		e.set_waypoint(Vector3(randf_range(-8.0, 8.0), 0.0, randf_range(-24.0, -14.0)))
+	match key:
+		"viking":
+			var side := -1.0 if randf() < 0.5 else 1.0
+			e.position = Vector3(side * randf_range(48.0, 58.0), randf_range(12.0, 15.0), -randf_range(52.0, 66.0))
+			var center := PLAYER_POS + Vector3(0.0, 0.0, -8.0)
+			e.set_orbit(center, randf_range(16.0, 24.0), PI + side * 0.9, side)
+			play_sfx("flyby", e.position, -4.0)
+			if not _air_warned["viking"]:
+				_air_warned["viking"] = true
+				_show_banner("维京战机来袭！")
+		"medivac":
+			var mside := -1.0 if randf() < 0.5 else 1.0
+			e.position = Vector3(mside * randf_range(42.0, 52.0), 12.0, -randf_range(48.0, 60.0))
+			e.drop_count = _drops_per_medivac
+			e.set_drop_zone(Vector3(randf_range(-10.0, 10.0), 0.0, randf_range(-26.0, -14.0)))
+			play_sfx("flyby", e.position, -4.0)
+			if not _air_warned["medivac"]:
+				_air_warned["medivac"] = true
+				_show_banner("医疗运输机空投！")
+		_:
+			# 地面小队：每 3-5 只换边换路线，队内成纵队（外侧依次排开）
+			if _squad_left <= 0:
+				_squad_left = SQUAD_MIN + (randi() % SQUAD_SPREAD)
+				_squad_side *= -1.0
+				_squad_idx = 0
+				_squad_lane = Vector3(_squad_side * randf_range(24.0, 32.0), 0.0, randf_range(-28.0, -12.0))
+				_squad_waypoint = Vector3(randf_range(-8.0, 8.0), 0.0, randf_range(-22.0, -12.0))
+			e.position = _squad_lane + Vector3(_squad_side * _squad_idx * 2.0, 0.0, _squad_idx * 2.4)
+			if with_waypoint:
+				e.set_waypoint(_squad_waypoint + Vector3(randf_range(-2.0, 2.0), 0.0, randf_range(-2.0, 2.0)))
+			dust_puff(e.position)
+			_squad_idx += 1
+			_squad_left -= 1
 	enemy_layer.add_child(e)
 	enemies.append(e)
 	e.died.connect(_on_enemy_died)
+	e.escaped.connect(_on_enemy_escaped)
 	_spawn_count += 1
 	return e
+
+
+## 医疗船空投：枪兵从天而降，落地扬尘
+func drop_marine(xz: Vector3) -> void:
+	var e := spawn_enemy("marine", false)
+	var target := xz + Vector3(randf_range(-2.5, 2.5), 0.0, randf_range(-2.5, 2.5))
+	e.global_position = Vector3(target.x, 7.0, target.z)
+	e.stun_t = 0.45
+	play_sfx("thump", e.global_position, -10.0)
+	var tw := create_tween()
+	tw.tween_property(e, "global_position:y", 0.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func():
+		if is_instance_valid(e) and e.alive:
+			dust_puff(e.global_position)
+			play_sfx("thump", e.global_position, -8.0))
 
 
 func _alive_count() -> int:
@@ -354,6 +596,17 @@ func _on_enemy_died(u: EnemyUnit3D) -> void:
 	enemies.erase(u)
 	kills += 1
 	score += u.score_value
+	hitstop()
+	if u.flying:
+		add_camera_shake(0.18)
+	else:
+		play_sfx("boom", u.global_position, -6.0)
+		spawn_scorch(u.global_position, 1.3)
+		dust_puff(u.global_position)
+
+
+func _on_enemy_escaped(u: EnemyUnit3D) -> void:
+	enemies.erase(u)
 
 
 func _refresh_hud() -> void:
@@ -393,6 +646,14 @@ func _build_environment() -> void:
 	env.glow_enabled = true
 	env.glow_intensity = 0.5
 	env.glow_hdr_threshold = 0.9
+	# 深度雾：纵深层次 + 远景岩环融进天际
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_light_color = Color(0.74, 0.83, 0.90)
+	env.fog_depth_begin = 30.0
+	env.fog_depth_end = 110.0
+	env.fog_aerial_perspective = 0.5
+	env.fog_sky_affect = 0.3
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
@@ -420,6 +681,21 @@ func _build_ground() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = GROUND_COLOR
 	mat.roughness = 1.0
+	# 程序噪声草地：无缝平铺，绿色深浅变化打破纯色地面
+	var noise := FastNoiseLite.new()
+	noise.frequency = 0.012
+	noise.fractal_octaves = 4
+	var ramp := Gradient.new()
+	ramp.colors = PackedColorArray([Color(0.55, 0.62, 0.46), Color(1.0, 1.0, 0.92)])
+	ramp.offsets = PackedFloat32Array([0.0, 1.0])
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.color_ramp = ramp
+	tex.noise = noise
+	mat.albedo_texture = tex
+	mat.uv1_scale = Vector3(12.0, 12.0, 1.0)
 	var ground := MeshInstance3D.new()
 	ground.name = "Ground"
 	ground.mesh = plane
@@ -435,6 +711,9 @@ func _build_castle() -> void:
 	_instance_glb(PATH_BUILDINGS % "b_bunker", Vector3(11.0, 0.0, -2.0), PI, BUILDING_SCALE)
 	_instance_glb(PATH_BUILDINGS % "b_missile_turret", Vector3(-16.0, 0.0, -8.0), PI, BUILDING_SCALE * 0.9)
 	_instance_glb(PATH_BUILDINGS % "b_missile_turret", Vector3(16.0, 0.0, -8.0), PI, BUILDING_SCALE * 0.9)
+	# 补给站：阵地后方两翼，丰富近景轮廓
+	_instance_glb(PATH_BUILDINGS % "b_supply_depot", Vector3(-25.0, 0.0, 6.0), PI, BUILDING_SCALE * 0.9)
+	_instance_glb(PATH_BUILDINGS % "b_supply_depot", Vector3(25.0, 0.0, 6.0), PI, BUILDING_SCALE * 0.9)
 
 
 func _scatter_props() -> void:
@@ -454,6 +733,11 @@ func _scatter_props() -> void:
 	_instance_glb(PATH_ENV % "e_mineral", Vector3(-17.5, 0.0, 12.0), 2.1, 1.8)
 	_instance_glb(PATH_ENV % "e_mineral", Vector3(16.0, 0.0, 14.0), 0.6, 2.2)
 	_instance_glb(PATH_ENV % "e_mineral", Vector3(17.5, 0.0, 12.0), 2.1, 1.8)
+	# 远景岩环：大块岩石围出地平线剪影，融进雾里
+	for i in 14:
+		var ang := TAU * i / 14.0 + rng.randf() * 0.35
+		var r := rng.randf_range(60.0, 74.0)
+		_instance_glb(PATH_ENV % "e_rock", Vector3(cos(ang) * r, 0.0, sin(ang) * r), rng.randf() * TAU, rng.randf_range(5.0, 9.0))
 
 
 func _build_layers() -> void:

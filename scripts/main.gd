@@ -24,6 +24,7 @@ var hud: DebugHud
 var spawner: EnemySpawner
 var mini_game: MiniGame
 var battle3d: Battlefield3D
+var codex: CodexPanel
 var mode3d := false
 
 var _cam_container: SubViewportContainer
@@ -115,15 +116,31 @@ func _ready() -> void:
 		return
 	if "--shot3d" in args:
 		_build_3d()
+		# --codex 附带参数：截图前打开手势图鉴（目检面板布局）
+		if "--codex" in args:
+			codex.open()
 		# 预置敌人在镜头前，用于目检模型/朝向/动画
 		for i in 7:
 			var key := "marauder" if i % 3 == 2 else "marine"
 			var e := battle3d.spawn_enemy(key)
 			e.global_position = battle3d.PLAYER_POS + Vector3(-12.0 + i * 4.0, 0.0, -13.0 - (i % 3) * 3.0)
+		# M1.6 空军目检：维京到位盘旋 + 医疗船进场空投（截图时恰有枪兵空降）
+		var vk := battle3d.spawn_enemy("viking")
+		vk.global_position = vk._fly_target
+		vk.speed = 60.0
+		var md := battle3d.spawn_enemy("medivac")
+		md.global_position = md._fly_target - Vector3(0.0, 0.0, 6.0)
+		md.speed = 60.0
 		# 0.7s 施放火球，1.55s 截图（爆炸瞬间 + 敌人已开火）
 		get_tree().create_timer(0.7).timeout.connect(func():
 			battle3d.spell_caster.cast("fireball", Vector2(640, 520)))
 		get_tree().create_timer(1.55).timeout.connect(_take_3d_shot)
+		return
+	if "--shot-gallery" in args:
+		_build_3d()
+		var sg: Node = load("res://tests/shot_gallery.gd").new()
+		sg.battlefield = battle3d
+		add_child(sg)
 		return
 	if "--battle3d-test" in args:
 		_build_3d()
@@ -169,7 +186,8 @@ func _build_3d() -> void:
 	battle3d.ui_layer.add_child(skeleton)
 	hud = DebugHud.new()
 	battle3d.ui_layer.add_child(hud)
-	hud.set_hint("握拳→画符→张掌 施法 | 空闲张掌/右键 护盾 | 1-5 直放法术 | F2 摄像头预览 | R 重开 ESC 退出")
+	hud.set_hint("H 手势图鉴 ｜ F1 调试 ｜ F2 摄像头预览 ｜ R 重开")
+	hud.set_message("按 H 查看每个法术怎么画")
 	# 摄像头预览小窗（F2 切换）：直接看追踪用的画面——手在不在镜头里一目了然
 	_cam_pip_panel = Panel.new()
 	_cam_pip_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -194,6 +212,9 @@ func _build_3d() -> void:
 	add_child(tracker)
 	fsm = GestureFSM.new()
 	add_child(fsm)
+	codex = CodexPanel.new()
+	codex.fsm = fsm
+	battle3d.add_child(codex)
 	_wire_3d_signals()
 
 

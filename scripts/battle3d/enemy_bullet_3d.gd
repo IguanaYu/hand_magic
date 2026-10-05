@@ -20,6 +20,8 @@ func setup(from: Vector3, target: Vector3, p_damage: float, speed: float, p_big:
 	damage = p_damage
 	big = p_big
 	_velocity = (target - from).normalized() * speed
+	if is_inside_tree() and _velocity.length_squared() > 0.001:
+		look_at(global_position + _velocity, Vector3.UP)
 
 
 func _ready() -> void:
@@ -35,8 +37,9 @@ func _ready() -> void:
 	mat.emission_energy_multiplier = 3.0
 	mesh.material_override = mat
 	add_child(mesh)
-	# 沿速度方向拉伸朝向
-	look_at(global_position + _velocity, Vector3.UP)
+	# 沿速度方向拉伸朝向（setup 可能在 _ready 之后才到，零速度时跳过）
+	if _velocity.length_squared() > 0.001:
+		look_at(global_position + _velocity, Vector3.UP)
 
 
 func _process(delta: float) -> void:

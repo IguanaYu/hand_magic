@@ -15,6 +15,11 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func _process(_delta: float) -> void:
+	# 状态量是普通变量，需手动请求重绘（否则血条/文字停留在首帧）
+	queue_redraw()
+
+
 func _draw() -> void:
 	var vp := get_viewport_rect().size
 	var font := ThemeDB.fallback_font
