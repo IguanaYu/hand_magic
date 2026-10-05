@@ -1,0 +1,2 @@
+# 素材包为第三方资产，不计入语言统计（否则两个 9MB 的预览 HTML 会淹没 GDScript）
+素材/** linguist-vendored
