@@ -11,3 +11,6 @@ downloads/
 # Godot crash temp files
 ~*.TMP
 *.tmp
+
+# 目检截图产物（--shot-gallery 生成，不入库）
+tests/gallery_*.png

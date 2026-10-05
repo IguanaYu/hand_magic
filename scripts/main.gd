@@ -131,6 +131,12 @@ func _ready() -> void:
 			battle3d.spell_caster.cast("fireball", Vector2(640, 520)))
 		get_tree().create_timer(1.55).timeout.connect(_take_3d_shot)
 		return
+	if "--shot-gallery" in args:
+		_build_3d()
+		var sg: Node = load("res://tests/shot_gallery.gd").new()
+		sg.battlefield = battle3d
+		add_child(sg)
+		return
 	if "--battle3d-test" in args:
 		_build_3d()
 		var bt: Node = load("res://tests/battle3d_test.gd").new()
