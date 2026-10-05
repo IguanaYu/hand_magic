@@ -29,6 +29,7 @@ var mode3d := false
 var _cam_container: SubViewportContainer
 var _cam_viewport: SubViewport
 var _cam_texture: TextureRect
+var _cam_pip_panel: Panel
 var _latest_hands: Array = []
 var _camera_alive := false
 var _mouse_fallback_note := false
@@ -144,10 +145,12 @@ func _build_3d() -> void:
 	battle3d = Battlefield3D.new()
 	battle3d.name = "Battlefield3D"
 	add_child(battle3d)
-	# 摄像头管线：离屏 SubViewport（modulate 全透明——只供手部追踪读帧，不上屏）
+	# 摄像头管线：离屏 SubViewport（modulate 全透明——只供手部追踪读帧，不上屏）。
+	# stretch 必须关：stretch 模式下容器会把视口压成自身尺寸（Node2D 父级下解析为
+	# 2x2 占位），读回帧全是空图，MediaPipe 永远识别不到手。
 	_cam_container = SubViewportContainer.new()
 	_cam_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_cam_container.stretch = true
+	_cam_container.stretch = false
 	_cam_container.modulate = Color(1, 1, 1, 0)
 	add_child(_cam_container)
 	_cam_viewport = SubViewport.new()
@@ -166,7 +169,27 @@ func _build_3d() -> void:
 	battle3d.ui_layer.add_child(skeleton)
 	hud = DebugHud.new()
 	battle3d.ui_layer.add_child(hud)
-	hud.set_hint("握拳→画符→张掌 施法 | 空闲张掌/右键 护盾 | 1-5 直放法术 | R 重开 ESC 退出")
+	hud.set_hint("握拳→画符→张掌 施法 | 空闲张掌/右键 护盾 | 1-5 直放法术 | F2 摄像头预览 | R 重开 ESC 退出")
+	# 摄像头预览小窗（F2 切换）：直接看追踪用的画面——手在不在镜头里一目了然
+	_cam_pip_panel = Panel.new()
+	_cam_pip_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_cam_pip_panel.offset_left = -258.0
+	_cam_pip_panel.offset_top = -198.0
+	_cam_pip_panel.offset_right = -8.0
+	_cam_pip_panel.offset_bottom = -8.0
+	var pip_style := StyleBoxFlat.new()
+	pip_style.bg_color = Color(0.02, 0.03, 0.06, 0.55)
+	pip_style.border_color = Color(0.35, 0.9, 1.0, 0.75)
+	pip_style.set_border_width_all(2)
+	pip_style.set_corner_radius_all(6)
+	pip_style.set_content_margin_all(2)
+	_cam_pip_panel.add_theme_stylebox_override("panel", pip_style)
+	hud.add_child(_cam_pip_panel)
+	var pip := TextureRect.new()
+	pip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	pip.texture = _cam_viewport.get_texture()
+	_cam_pip_panel.add_child(pip)
 	tracker = HandTracker.new()
 	add_child(tracker)
 	fsm = GestureFSM.new()
@@ -207,10 +230,10 @@ func _view_size() -> Vector2:
 
 
 func _build_scene() -> void:
-	# 摄像头画面（SubViewport 读回方案，见 hand_tracker.gd）
+	# 摄像头画面（SubViewport 读回方案，见 hand_tracker.gd）；stretch=false 同 _build_3d
 	_cam_container = SubViewportContainer.new()
 	_cam_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_cam_container.stretch = true
+	_cam_container.stretch = false
 	add_child(_cam_container)
 
 	_cam_viewport = SubViewport.new()
@@ -533,7 +556,24 @@ func _process_3d(delta: float) -> void:
 
 func _update_hud(_delta: float) -> void:
 	var last := fsm.last_result
+	var diag := tracker.diagnostics()
+	var cam := str(diag.get("camera", ""))
+	var sent := int(diag.get("frames_sent", 0))
+	var recv := int(diag.get("results_received", 0))
+	# 管线判定：定位「没手势」卡在哪一环（摄像头→帧→识别→见手）
+	var verdict := "追踪中"
+	if cam.is_empty():
+		verdict = "摄像头未接入"
+	elif sent == 0:
+		verdict = "摄像头无帧"
+	elif recv == 0:
+		verdict = "识别无回调"
+	elif int(diag.get("hands_frames", 0)) == 0:
+		verdict = "未见手（对准镜头）"
 	var info := {
+		"追踪": verdict,
+		"摄像头": cam if not cam.is_empty() else "—",
+		"管线": "送 %d / 回 %d / 弃 %d" % [sent, recv, int(diag.get("frames_dropped", 0))],
 		"状态": fsm.state_name(),
 		"姿势": PoseClassifier.pose_name(pose_classifier.stable_pose()),
 		"延迟": "%.0f ms" % tracker.latency_ms,
@@ -581,6 +621,10 @@ func _dump_enemy_anim() -> void:
 
 func _finish_camera_test() -> void:
 	var d := tracker.diagnostics()
+	# 追踪用原始画面落盘——肉眼确认渲染目标里到底有没有图像
+	var cam_img := _cam_viewport.get_texture().get_image()
+	if cam_img != null and not cam_img.is_empty():
+		cam_img.save_png("res://tests/camera_shot.png")
 	var lines: Array = [
 		"camera=" + str(d.get("camera", "")),
 		"datatype=" + str(d.get("datatype", -1)),
@@ -632,6 +676,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_F1:
 				hud.toggle()
+			KEY_F2:
+				if _cam_pip_panel != null:
+					_cam_pip_panel.visible = not _cam_pip_panel.visible
 			KEY_R:
 				if battle3d != null:
 					battle3d.restart()

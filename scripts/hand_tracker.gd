@@ -147,7 +147,7 @@ func _setup_camera_texture() -> void:
 			tex.which_feed = CameraServer.FEED_RGBA_IMAGE
 			_cam_texture_rect.texture = tex
 			_cam_texture_rect.material = null
-			_viewport.size = tex.get_size()
+			_fit_viewport(tex)
 		CameraFeed.FEED_YCBCR:
 			var tex := CameraTexture.new()
 			tex.camera_feed_id = _feed.get_id()
@@ -156,7 +156,7 @@ func _setup_camera_texture() -> void:
 			mat.shader = load("res://shaders/yuy2_to_rgb.gdshader")
 			mat.set_shader_parameter("texture_yuy2", tex)
 			_cam_texture_rect.material = mat
-			_viewport.size = tex.get_size()
+			_fit_viewport(tex)
 		CameraFeed.FEED_YCBCR_SEP:
 			var tex_y := CameraTexture.new()
 			tex_y.camera_feed_id = _feed.get_id()
@@ -169,11 +169,19 @@ func _setup_camera_texture() -> void:
 			mat.set_shader_parameter("texture_y", tex_y)
 			mat.set_shader_parameter("texture_uv", tex_uv)
 			_cam_texture_rect.material = mat
-			_viewport.size = tex_y.get_size()
+			_fit_viewport(tex_y)
 		_:
 			if not _mirror_warned:
 				_mirror_warned = true
 				tracker_message.emit("未知摄像头数据格式: %d" % _feed.get_datatype())
+
+
+## CameraTexture.get_size() 在部分后端返回 (2,2)/(0,0) 占位值——退化时回退采集默认尺寸
+func _fit_viewport(tex: CameraTexture) -> void:
+	var s: Vector2 = tex.get_size()
+	if s.x < 32.0 or s.y < 32.0:
+		s = Vector2(640, 480)
+	_viewport.size = Vector2i(int(s.x), int(s.y))
 
 
 func _on_frame_changed() -> void:
@@ -194,6 +202,10 @@ func _on_frame_changed() -> void:
 	if image == null or image.is_empty():
 		return
 	image.convert(Image.FORMAT_RGB8)
+	if frames_sent == 1 or frames_sent == 10 or frames_sent == 40:
+		var px := image.get_pixelv(Vector2i(16, 16))
+		print("CAMPROBE frame#%d img=%dx%d vp_size=%s px(16,16)=%s" % [
+			frames_sent, image.get_width(), image.get_height(), _viewport.size, px])
 	var ts := Time.get_ticks_msec()
 	if ts <= _last_ts:
 		ts = _last_ts + 1  # MediaPipe 要求时间戳严格递增
@@ -204,12 +216,14 @@ func _on_frame_changed() -> void:
 	frames_sent += 1
 
 
+## MediaPipe 在后台线程回调本函数——Node 的信号不能跨线程 emit，必须 call_deferred
 func _on_result(result, _image, _timestamp_ms: int) -> void:
 	results_received += 1
-	latency_ms = 0.0 if latency_ms == 0.0 else latency_ms * 0.8 + (Time.get_ticks_msec() - _frame_t0) * 0.2
+	var dt := float(Time.get_ticks_msec() - _frame_t0)
+	latency_ms = dt if latency_ms == 0.0 else latency_ms * 0.8 + dt * 0.2
 	var hands: Array = []
 	if result == null:
-		hands_updated.emit(hands)
+		hands_updated.emit.call_deferred(hands)
 		return
 	var all_landmarks = result.hand_landmarks
 	var all_handedness = result.handedness
@@ -231,7 +245,7 @@ func _on_result(result, _image, _timestamp_ms: int) -> void:
 		hands.append(_make_hand(label, lm_array, Time.get_ticks_msec()))
 	if hands.size() > 0:
 		hands_frames += 1
-	hands_updated.emit(hands)
+	hands_updated.emit.call_deferred(hands)
 
 
 func diagnostics() -> Dictionary:
