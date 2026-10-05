@@ -1,0 +1,51 @@
+[snap] t=31.0s score=0 kills=0 hp=0 mana=100 casts=0 fizzle=0 敌数=1 over=True 敌人=[{'x': 454, 'y': 460}]
+[click] 目标敌人@(454,460) 屏(625,378)
+  before: kills=0 mana=100 casts=0 敌数=1
+  after : kills=0 mana=100 casts=0 敌数=0
+[FAIL] 无敌人可瞄
+[key r] t=31.0s score=0 hp=0 over=True 敌数=0
+[snap] t=31.0s score=0 kills=0 hp=0 mana=100 casts=0 fizzle=0 敌数=0 over=True 敌人=[]
+[snap] t=10.0s score=0 kills=0 hp=10 mana=100 casts=0 fizzle=0 敌数=4 over=False 敌人=[{'x': 740, 'y': 710}, {'x': 184, 'y': 96}, {'x': 874, 'y': 900}, {'x': -31, 'y': 610}]
+[click] 目标敌人@(-31,610) 屏(348,465)
+  before: kills=0 mana=100 casts=0 敌数=4
+  after : kills=0 mana=100 casts=0 敌数=4
+[snap] t=32.0s score=0 kills=0 hp=2 mana=100 casts=0 fizzle=0 敌数=6 over=False 敌人=[{'x': 495, 'y': 350}, {'x': 403, 'y': 684}, {'x': 341, 'y': 472}, {'x': 532, 'y': 747}, {'x': 100, 'y': 190}, {'x': 166, 'y': 969}]
+[click] 目标敌人@(495,350) 屏(648,315)
+  before: kills=0 mana=100 casts=0 敌数=6
+  after : kills=0 mana=100 casts=0 敌数=6
+[snap] t=35.0s score=0 kills=0 hp=0 mana=100 casts=0 fizzle=0 敌数=0 over=True 敌人=[]
+[FAIL] 无敌人可瞄
+[key r] t=1.0s score=0 hp=10 over=False 敌数=0
+[snap] t=3.0s score=0 kills=0 hp=10 mana=100 casts=0 fizzle=0 敌数=1 over=False 敌人=[{'x': 1324, 'y': 191}]
+[FAIL] 无画面内敌人
+[FAIL] 无画面内敌人
+[click] 目标敌人@(500,637) 屏(285,368)
+  before: kills=0 mana=100 casts=0 敌数=5
+  after : kills=0 mana=100 casts=0 敌数=6
+[click] 目标敌人@(795,321) 屏(454,185)
+  before: kills=0 mana=100 casts=0 敌数=5
+  after : kills=0 mana=100 casts=0 敌数=6
+[snap] t=23.0s score=0 kills=0 hp=5 mana=100 casts=0 fizzle=0 敌数=5 over=False 敌人=[{'x': 924, 'y': 608}, {'x': 1030, 'y': 695}, {'x': 163, 'y': 261}, {'x': 842, 'y': 897}, {'x': 200, 'y': 1000}]
+[snap] t=7.0s score=0 kills=0 hp=10 mana=100 casts=0 fizzle=0 敌数=3 over=False 敌人=[{'x': 513, 'y': 806}, {'x': 416, 'y': 53}, {'x': 1108, 'y': -42}]
+[click] 目标敌人@(513,806) 屏(292,465)
+  before: kills=0 mana=100 casts=0 敌数=3
+  after : kills=0 mana=100 casts=0 敌数=3
+[key r] t=0.0s score=0 hp=10 over=False 敌数=0
+[FAIL] 无画面内敌人
+[click] 目标敌人@(714,902) 屏(407,521)
+  before: kills=0 mana=100 casts=1 敌数=2
+  after : kills=1 mana=94 casts=2 敌数=1
+[snap] t=7.0s score=10 kills=1 hp=10 mana=96 casts=2 fizzle=0 敌数=2 over=False 敌人=[{'x': 695, 'y': 796}, {'x': 1002, 'y': 1002}]
+[click] 目标敌人@(762,621) 屏(435,359)
+  before: kills=1 mana=100 casts=2 敌数=5
+  after : kills=2 mana=94 casts=3 敌数=3
+[click] 目标敌人@(842,215) 屏(480,124)
+  before: kills=2 mana=96 casts=3 敌数=4
+  after : kills=3 mana=92 casts=4 敌数=3
+[slash_drag] 屏(171,404)->(513,144)
+  before: casts=4 fizzle=0 kills=3
+  after : casts=5 fizzle=0 kills=4 fsm=待机
+[snap] t=30.0s score=40 kills=4 hp=3 mana=98 casts=5 fizzle=0 敌数=2 over=False 敌人=[{'x': 110, 'y': 114}, {'x': 820, 'y': 26}]
+[wait 25.0s] t=42.0s hp=0 score=40 敌数=0 over=True
+[key r] t=1.0s score=0 hp=10 over=False 敌数=0
+[snap] t=3.0s score=0 kills=0 hp=10 mana=100 casts=5 fizzle=0 敌数=1 over=False 敌人=[{'x': -46, 'y': 908}]

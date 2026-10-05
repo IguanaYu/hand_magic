@@ -1,0 +1,15 @@
+符文鲁棒性（每格 30 次试验，含随机缩放/平移/旋转；判定=识别正确且得分≥0.80）
+σ=0.000 采样=40点 | circle:100%(1.00) zigzag:100%(0.97) triangle:100%(0.98) slash:100%(0.99) | PASS
+σ=0.000 采样=20点 | circle:100%(1.00) zigzag:100%(0.97) triangle:100%(0.98) slash:100%(0.98) | PASS
+σ=0.000 采样=12点 | circle:100%(0.99) zigzag:100%(0.97) triangle:100%(0.98) slash:100%(0.97) | PASS
+σ=0.005 采样=40点 | circle:100%(0.97) zigzag:100%(0.96) triangle:100%(0.96) slash:100%(0.95) | PASS
+σ=0.005 采样=20点 | circle:100%(0.98) zigzag:100%(0.97) triangle:100%(0.97) slash:100%(0.94) | PASS
+σ=0.005 采样=12点 | circle:100%(0.97) zigzag:100%(0.97) triangle:100%(0.97) slash:100%(0.95) | PASS
+σ=0.010 采样=40点 | circle:100%(0.95) zigzag:100%(0.96) triangle:100%(0.95) slash:100%(0.92) | PASS
+σ=0.010 采样=20点 | circle:100%(0.95) zigzag:100%(0.96) triangle:100%(0.95) slash:100%(0.92) | PASS
+σ=0.010 采样=12点 | circle:100%(0.96) zigzag:100%(0.96) triangle:100%(0.95) slash:100%(0.91) | PASS
+σ=0.020 采样=40点 | circle:73%(0.91) zigzag:100%(0.94) triangle:100%(0.93) slash:100%(0.92) | PASS(低噪达标)
+σ=0.020 采样=20点 | circle:73%(0.92) zigzag:100%(0.95) triangle:100%(0.93) slash:87%(0.88) | PASS(低噪达标)
+σ=0.020 采样=12点 | circle:83%(0.93) zigzag:100%(0.95) triangle:100%(0.93) slash:77%(0.88) | PASS(低噪达标)
+
+结论: 全部噪声等级 ≥90% 达标

@@ -1,0 +1,47 @@
+35 PASS / 0 FAIL
+[PASS] fireball: 握拳进入聚气
+[PASS] fireball: 伸指进入画符
+[PASS] fireball: 拖尾随轨迹更新
+[PASS] 火球: spell_manager收到施放
+[PASS] 火球: 施放计数+1
+[PASS] 火球: 法力扣减
+[PASS] 火球: 砸碎锚点靶0 (碎1)
+[PASS] 火球: circle识别得分≥0.8
+  dbg[fireball]: cast=1/1 fizz=0() last={ "name": "circle", "score": 0.99752021865717 } trail=40 mana=75 traj=40
+  cast_traj: n=40 采样=(0.500,0.280) (0.587,0.317) (0.620,0.405) (0.580,0.490) (0.490,0.520) (0.407,0.476) (0.381,0.386) (0.428,0.304) →重识别=circle(0.998)
+[PASS] lightning: 握拳进入聚气
+[PASS] lightning: 伸指进入画符
+[PASS] lightning: 拖尾随轨迹更新
+[PASS] 链电: 施放计数+1
+[PASS] 链电: 链住3个靶
+  dbg[lightning]: cast=2/2 fizz=0() last={ "name": "zigzag", "score": 0.96862879872929 } trail=46 mana=66 traj=46
+  cast_traj: n=46 采样=(0.300,0.300) (0.433,0.300) (0.567,0.300) (0.700,0.300) (0.567,0.383) (0.433,0.467) (0.300,0.550) (0.433,0.550) (0.567,0.550) (0.700,0.550) →重识别=zigzag(0.969)
+[PASS] 重生: 练习靶全部复活
+[PASS] ice_field: 握拳进入聚气
+[PASS] ice_field: 伸指进入画符
+[PASS] ice_field: 拖尾随轨迹更新
+[PASS] 冰域: 施放计数+1
+[PASS] 冰域: 靶1被冰冻未击碎
+[PASS] 冰域: 全场无击碎
+  dbg[ice_field]: cast=3/3 fizz=0() last={ "name": "triangle", "score": 0.87190227338485 } trail=22 mana=53 traj=22
+  cast_traj: n=22 采样=(0.500,0.300) (0.524,0.340) (0.548,0.380) (0.572,0.420) (0.596,0.460) (0.620,0.500) (0.644,0.540) (0.668,0.580) (0.620,0.580) (0.572,0.580) (0.524,0.580) →重识别=triangle(0.872)
+[PASS] wind_blade: 握拳进入聚气
+[PASS] wind_blade: 伸指进入画符
+[PASS] wind_blade: 拖尾随轨迹更新
+[PASS] 风刃: 施放计数+1
+  dbg[wind_blade]: cast=4/4 fizz=0() last={ "name": "slash", "score": 0.99999977105222 } trail=20 mana=50 traj=20
+  cast_traj: n=20 采样=(0.350,0.600) (0.382,0.574) (0.413,0.547) (0.445,0.521) (0.476,0.495) (0.508,0.468) (0.539,0.442) (0.571,0.416) (0.603,0.389) (0.634,0.363) →重识别=slash(1.000)
+[PASS] 风刃: 弹道命中目标
+[PASS] garbage: 握拳进入聚气
+[PASS] garbage: 伸指进入画符
+[PASS] garbage: 拖尾随轨迹更新
+[PASS] FIZZLE: 垃圾轨迹失败计数+1
+[PASS] FIZZLE: 失败不施放
+  dbg[garbage]: cast=4/4 fizz=1(轨迹太短) last={ "name": "", "score": 0.0, "reason": "轨迹太短" } trail=15 mana=53 traj=15
+  cast_traj: n=20 采样=(0.350,0.600) (0.382,0.574) (0.413,0.547) (0.445,0.521) (0.476,0.495) (0.508,0.468) (0.539,0.442) (0.571,0.416) (0.603,0.389) (0.634,0.363) →重识别=slash(1.000)
+[PASS] 取消: 先进入聚气
+[PASS] 取消: 张掌保持500ms回到待机
+[PASS] 超时: 2.5s自动FIZZLE
+[PASS] 超时: 失败不施放
+[PASS] 性能: 识别单次耗时 8.25ms (阈值12ms)
+recognize_avg_ms=8.25

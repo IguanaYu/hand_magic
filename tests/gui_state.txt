@@ -1,0 +1,1 @@
+{"cast":0,"casts_total":5,"elapsed":15.0,"enemies":[{"x":394,"y":633},{"x":597,"y":358},{"x":557,"y":263},{"x":177,"y":583},{"x":528,"y":886},{"x":1212,"y":-37}],"fizzle":0,"fsm":"待机","hits":5,"is_over":false,"kills":0,"mana":100,"score":0,"t":146538,"ward_hp":10}

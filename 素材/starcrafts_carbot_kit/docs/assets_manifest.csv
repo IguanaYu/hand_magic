@@ -1,0 +1,87 @@
+﻿key,name_cn,name_en,category,race,single_png,doc_md,ref_dir
+archon,执政官,Archon,unit,protoss,renders/singles/archon.png,research/archon.md,refs/protoss/archon/
+b_barracks,兵营,Barracks,building,terran,renders/singles/b_barracks.png,research/b_barracks.md,refs/terran/b_barracks/
+b_bunker,地堡,Bunker,building,terran,renders/singles/b_bunker.png,research/b_bunker.md,refs/terran/b_bunker/
+b_command_center,指挥中心,Command Center,building,terran,renders/singles/b_command_center.png,research/b_command_center.md,refs/terran/b_command_center/
+b_cybernetics_core,控制核心,Cybernetics Core,building,protoss,renders/singles/b_cybernetics_core.png,research/b_cybernetics_core.md,refs/protoss/b_cybernetics_core/
+b_evolution_chamber,进化腔,Evolution Chamber,building,zerg,renders/singles/b_evolution_chamber.png,research/b_evolution_chamber.md,refs/zerg/b_evolution_chamber/
+b_factory,重工厂,Factory,building,terran,renders/singles/b_factory.png,research/b_factory.md,refs/terran/b_factory/
+b_forge,锻造厂,Forge,building,protoss,renders/singles/b_forge.png,research/b_forge.md,refs/protoss/b_forge/
+b_gateway,传送门,Gateway,building,protoss,renders/singles/b_gateway.png,research/b_gateway.md,refs/protoss/b_gateway/
+b_hatchery,孵化场,Hatchery,building,zerg,renders/singles/b_hatchery.png,research/b_hatchery.md,refs/zerg/b_hatchery/
+b_hydralisk_den,刺蛇巢,Hydralisk Den,building,zerg,renders/singles/b_hydralisk_den.png,research/b_hydralisk_den.md,refs/zerg/b_hydralisk_den/
+b_missile_turret,导弹塔,Missile Turret,building,terran,renders/singles/b_missile_turret.png,research/b_missile_turret.md,refs/terran/b_missile_turret/
+b_nexus,枢纽,Nexus,building,protoss,renders/singles/b_nexus.png,research/b_nexus.md,refs/protoss/b_nexus/
+b_nydus_worm,坑道虫,Nydus Worm,building,zerg,renders/singles/b_nydus_worm.png,research/b_nydus_worm.md,refs/zerg/b_nydus_worm/
+b_photon_cannon,光子炮,Photon Cannon,building,protoss,renders/singles/b_photon_cannon.png,research/b_photon_cannon.md,refs/protoss/b_photon_cannon/
+b_pylon,水晶塔,Pylon,building,protoss,renders/singles/b_pylon.png,research/b_pylon.md,refs/protoss/b_pylon/
+b_refinery,精炼厂,Refinery,building,terran,renders/singles/b_refinery.png,research/b_refinery.md,refs/terran/b_refinery/
+b_robotics_facility,机械台,Robotics Facility,building,protoss,renders/singles/b_robotics_facility.png,research/b_robotics_facility.md,refs/protoss/b_robotics_facility/
+b_spawning_pool,孵化池,Spawning Pool,building,zerg,renders/singles/b_spawning_pool.png,research/b_spawning_pool.md,refs/zerg/b_spawning_pool/
+b_spine_crawler,脊针爬虫,Spine Crawler,building,zerg,renders/singles/b_spine_crawler.png,research/b_spine_crawler.md,refs/zerg/b_spine_crawler/
+b_spire,尖塔,Spire,building,zerg,renders/singles/b_spire.png,research/b_spire.md,refs/zerg/b_spire/
+b_spore_crawler,孢子爬虫,Spore Crawler,building,zerg,renders/singles/b_spore_crawler.png,research/b_spore_crawler.md,refs/zerg/b_spore_crawler/
+b_stargate,星门,Stargate,building,protoss,renders/singles/b_stargate.png,research/b_stargate.md,refs/protoss/b_stargate/
+b_starport,星港,Starport,building,terran,renders/singles/b_starport.png,research/b_starport.md,refs/terran/b_starport/
+b_supply_depot,补给站,Supply Depot,building,terran,renders/singles/b_supply_depot.png,research/b_supply_depot.md,refs/terran/b_supply_depot/
+baneling,毒爆虫,Baneling,unit,zerg,renders/singles/baneling.png,research/baneling.md,refs/zerg/baneling/
+banshee,女妖,Banshee,unit,terran,renders/singles/banshee.png,research/banshee.md,refs/terran/banshee/
+battlecruiser,战列巡航舰,Battlecruiser,unit,terran,renders/singles/battlecruiser.png,research/battlecruiser.md,refs/terran/battlecruiser/
+carrier,航空母舰,Carrier,unit,protoss,renders/singles/carrier.png,research/carrier.md,refs/protoss/carrier/
+colossus,巨像,Colossus,unit,protoss,renders/singles/colossus.png,research/colossus.md,refs/protoss/colossus/
+corruptor,腐化者,Corruptor,unit,zerg,renders/singles/corruptor.png,research/corruptor.md,refs/zerg/corruptor/
+cyclone,旋风,Cyclone,unit,terran,renders/singles/cyclone.png,research/cyclone.md,refs/terran/cyclone/
+dark_templar,黑暗圣堂武士,Dark Templar,unit,protoss,renders/singles/dark_templar.png,research/dark_templar.md,refs/protoss/dark_templar/
+ghost,幽灵,Ghost,unit,terran,renders/singles/ghost.png,research/ghost.md,refs/terran/ghost/
+h_abathur,阿巴瑟,Abathur,hero,zerg,renders/singles/h_abathur.png,research/h_abathur.md,refs/zerg/h_abathur/
+h_alarak,阿拉纳克,Alarak,hero,protoss,renders/singles/h_alarak.png,research/h_alarak.md,refs/protoss/h_alarak/
+h_artanis,阿塔尼斯,Artanis,hero,protoss,renders/singles/h_artanis.png,research/h_artanis.md,refs/protoss/h_artanis/
+h_dehaka,德哈卡,Dehaka,hero,zerg,renders/singles/h_dehaka.png,research/h_dehaka.md,refs/zerg/h_dehaka/
+h_fenix,菲尼克斯,Fenix (Dragoon),hero,protoss,renders/singles/h_fenix.png,research/h_fenix.md,refs/protoss/h_fenix/
+h_kerrigan,凯瑞甘,Sarah Kerrigan,hero,zerg,renders/singles/h_kerrigan.png,research/h_kerrigan.md,refs/zerg/h_kerrigan/
+h_mengsk,蒙斯克,Arcturus Mengsk,hero,terran,renders/singles/h_mengsk.png,research/h_mengsk.md,refs/terran/h_mengsk/
+h_nova,诺娃,Nova,hero,terran,renders/singles/h_nova.png,research/h_nova.md,refs/terran/h_nova/
+h_raynor,吉姆·雷诺,Jim Raynor,hero,terran,renders/singles/h_raynor.png,research/h_raynor.md,refs/terran/h_raynor/
+h_tychus,泰凯斯,Tychus Findlay,hero,terran,renders/singles/h_tychus.png,research/h_tychus.md,refs/terran/h_tychus/
+h_zagara,扎加拉,Zagara,hero,zerg,renders/singles/h_zagara.png,research/h_zagara.md,refs/zerg/h_zagara/
+h_zeratul,泽拉图,Zeratul,hero,protoss,renders/singles/h_zeratul.png,research/h_zeratul.md,refs/protoss/h_zeratul/
+hellion,恶火,Hellion,unit,terran,renders/singles/hellion.png,research/hellion.md,refs/terran/hellion/
+high_templar,高阶圣堂武士,High Templar,unit,protoss,renders/singles/high_templar.png,research/high_templar.md,refs/protoss/high_templar/
+hydralisk,刺蛇,Hydralisk,unit,zerg,renders/singles/hydralisk.png,research/hydralisk.md,refs/zerg/hydralisk/
+immortal,不朽者,Immortal,unit,protoss,renders/singles/immortal.png,research/immortal.md,refs/protoss/immortal/
+infestor,感染虫,Infestor,unit,zerg,renders/singles/infestor.png,research/infestor.md,refs/zerg/infestor/
+liberator,解放者,Liberator,unit,terran,renders/singles/liberator.png,research/liberator.md,refs/terran/liberator/
+marauder,掠夺者,Marauder,unit,terran,renders/singles/marauder.png,research/marauder.md,refs/terran/marauder/
+marine,陆战队员,Marine,unit,terran,renders/singles/marine.png,research/marine.md,refs/terran/marine/
+medivac,医疗运输机,Medivac,unit,terran,renders/singles/medivac.png,research/medivac.md,refs/terran/medivac/
+mothership,母舰,Mothership,unit,protoss,renders/singles/mothership.png,research/mothership.md,refs/protoss/mothership/
+mutalisk,异龙,Mutalisk,unit,zerg,renders/singles/mutalisk.png,research/mutalisk.md,refs/zerg/mutalisk/
+observer,观察者,Observer,unit,protoss,renders/singles/observer.png,research/observer.md,refs/protoss/observer/
+overlord,领主,Overlord,unit,zerg,renders/singles/overlord.png,research/overlord.md,refs/zerg/overlord/
+phoenix,凤凰,Phoenix,unit,protoss,renders/singles/phoenix.png,research/phoenix.md,refs/protoss/phoenix/
+probe,探机,Probe,unit,protoss,renders/singles/probe.png,research/probe.md,refs/protoss/probe/
+queen,虫后,Queen,unit,zerg,renders/singles/queen.png,research/queen.md,refs/zerg/queen/
+raven,渡鸦,Raven,unit,terran,renders/singles/raven.png,research/raven.md,refs/terran/raven/
+reaper,收割者,Reaper,unit,terran,renders/singles/reaper.png,research/reaper.md,refs/terran/reaper/
+roach,蟑螂,Roach,unit,zerg,renders/singles/roach.png,research/roach.md,refs/zerg/roach/
+scv,SCV 工程兵,SCV,unit,terran,renders/singles/scv.png,research/scv.md,refs/terran/scv/
+sentry,哨兵,Sentry,unit,protoss,renders/singles/sentry.png,research/sentry.md,refs/protoss/sentry/
+siege_tank,攻城坦克,Siege Tank,unit,terran,renders/singles/siege_tank.png,research/siege_tank.md,refs/terran/siege_tank/
+stalker,追猎者,Stalker,unit,protoss,renders/singles/stalker.png,research/stalker.md,refs/protoss/stalker/
+swarm_host,虫群宿主,Swarm Host,unit,zerg,renders/singles/swarm_host.png,research/swarm_host.md,refs/zerg/swarm_host/
+thor,雷神,Thor,unit,terran,renders/singles/thor.png,research/thor.md,refs/terran/thor/
+ultralisk,雷兽,Ultralisk,unit,zerg,renders/singles/ultralisk.png,research/ultralisk.md,refs/zerg/ultralisk/
+viking,维京战机,Viking,unit,terran,renders/singles/viking.png,research/viking.md,refs/terran/viking/
+viper,飞蛇,Viper,unit,zerg,renders/singles/viper.png,research/viper.md,refs/zerg/viper/
+void_ray,虚空辉光舰,Void Ray,unit,protoss,renders/singles/void_ray.png,research/void_ray.md,refs/protoss/void_ray/
+warp_prism,折跃棱镜,Warp Prism,unit,protoss,renders/singles/warp_prism.png,research/warp_prism.md,refs/protoss/warp_prism/
+widow_mine,寡妇雷,Widow Mine,unit,terran,renders/singles/widow_mine.png,research/widow_mine.md,refs/terran/widow_mine/
+zealot,狂热者,Zealot,unit,protoss,renders/singles/zealot.png,research/zealot.md,refs/protoss/zealot/
+zergling,跳虫,Zergling,unit,zerg,renders/singles/zergling.png,research/zergling.md,refs/zerg/zergling/
+e_mineral,水晶矿,Mineral Field,env,neutral,renders/singles/e_mineral.png,,
+e_geyser,气泉,Vespene Geyser,env,neutral,renders/singles/e_geyser.png,,
+e_creep,菌毯,Creep Patch,env,neutral,renders/singles/e_creep.png,,
+e_rock,岩石,Rock,env,neutral,renders/singles/e_rock.png,,
+e_tree,树,Tree,env,neutral,renders/singles/e_tree.png,,
+e_bush,草丛,Bush,env,neutral,renders/singles/e_bush.png,,
+e_egg,虫卵,Zerg Egg,env,neutral,renders/singles/e_egg.png,,

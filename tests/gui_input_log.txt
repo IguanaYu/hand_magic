@@ -1,0 +1,31 @@
+35720 InputEventMouseButton: button_index=1, mods=none, pressed=true, canceled=false, position=((512.0, 814.0)), button_mask=0
+35830 InputEventMouseButton: button_index=1, mods=none, pressed=false, canceled=false, position=((512.0, 814.0)), button_mask=
+35836 InputEventKey: keycode=65 (A), mods=none, physical=false, location=unspecified, pressed=true, echo=false
+35841 InputEventKey: keycode=65 (A), mods=none, physical=false, location=unspecified, pressed=false, echo=false
+35847 InputEventKey: keycode=8388607 (Unknown), mods=none, physical=false, location=unspecified, pressed=true, echo=false
+66056 InputEventKey: keycode=82 (R), mods=none, physical=false, location=unspecified, pressed=true, echo=false
+66116 InputEventKey: keycode=82 (R), mods=none, physical=false, location=unspecified, pressed=false, echo=false
+71419 InputEventMouseButton: button_index=1, mods=none, pressed=true, canceled=false, position=((713.0, 912.0)), button_mask=0
+71519 InputEventMouseButton: button_index=1, mods=none, pressed=false, canceled=false, position=((713.0, 912.0)), button_mask=
+86897 InputEventMouseButton: button_index=1, mods=none, pressed=true, canceled=false, position=((762.0, 628.0)), button_mask=0
+86997 InputEventMouseButton: button_index=1, mods=none, pressed=false, canceled=false, position=((762.0, 628.0)), button_mask=
+89618 InputEventMouseButton: button_index=1, mods=none, pressed=true, canceled=false, position=((841.0, 217.0)), button_mask=0
+89709 InputEventMouseButton: button_index=1, mods=none, pressed=false, canceled=false, position=((841.0, 217.0)), button_mask=
+92330 InputEventMouseButton: button_index=1, mods=none, pressed=true, canceled=false, position=((300.0, 707.0)), button_mask=0
+92335 InputEventMouseMotion: button_mask=0, position=((342.0, 674.0)), relative=((0.0, 0.0)), velocity=((0.0, 0.0)), pressure=
+92400 InputEventMouseMotion: button_mask=0, position=((386.0, 642.0)), relative=((44.0, -32.0)), velocity=((0.0, 0.0)), pressu
+92460 InputEventMouseMotion: button_mask=0, position=((428.0, 609.0)), relative=((42.0, -33.0)), velocity=((338.308, -246.0422
+92520 InputEventMouseMotion: button_mask=0, position=((471.0, 577.0)), relative=((43.0, -32.0)), velocity=((338.308, -246.0422
+92590 InputEventMouseMotion: button_mask=0, position=((513.0, 544.0)), relative=((42.0, -33.0)), velocity=((653.811, -499.9731
+92650 InputEventMouseMotion: button_mask=0, position=((557.0, 513.0)), relative=((44.0, -31.0)), velocity=((653.811, -499.9731
+92710 InputEventMouseMotion: button_mask=0, position=((599.0, 479.0)), relative=((42.0, -34.0)), velocity=((716.0341, -532.862
+92770 InputEventMouseMotion: button_mask=0, position=((641.0, 446.0)), relative=((42.0, -33.0)), velocity=((716.0341, -532.862
+92850 InputEventMouseMotion: button_mask=0, position=((685.0, 415.0)), relative=((44.0, -31.0)), velocity=((599.345, -478.049)
+92910 InputEventMouseMotion: button_mask=0, position=((727.0, 381.0)), relative=((42.0, -34.0)), velocity=((599.345, -478.049)
+92970 InputEventMouseMotion: button_mask=0, position=((771.0, 350.0)), relative=((44.0, -31.0)), velocity=((716.4875, -541.531
+93050 InputEventMouseMotion: button_mask=0, position=((813.0, 317.0)), relative=((42.0, -33.0)), velocity=((716.4875, -541.531
+93130 InputEventMouseMotion: button_mask=0, position=((856.0, 285.0)), relative=((43.0, -32.0)), velocity=((537.0569, -399.670
+93210 InputEventMouseMotion: button_mask=0, position=((898.0, 252.0)), relative=((42.0, -33.0)), velocity=((537.0569, -399.670
+93411 InputEventMouseButton: button_index=1, mods=none, pressed=false, canceled=false, position=((898.0, 252.0)), button_mask=
+131991 InputEventKey: keycode=82 (R), mods=none, physical=false, location=unspecified, pressed=true, echo=false
+132061 InputEventKey: keycode=82 (R), mods=none, physical=false, location=unspecified, pressed=false, echo=false

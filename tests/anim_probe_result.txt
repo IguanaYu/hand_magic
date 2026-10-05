@@ -1,0 +1,9 @@
+marine 动画清单(3): marine_attack, marine_idle, marine_move
+marine marine_idle OK (2.00s, 25 轨道)
+marine marine_move OK (0.67s, 25 轨道)
+marine marine_attack OK (1.50s, 25 轨道)
+marauder 动画清单(3): marauder_attack, marauder_idle, marauder_move
+marauder marauder_idle OK (2.00s, 48 轨道)
+marauder marauder_move OK (0.83s, 48 轨道)
+marauder marauder_attack OK (0.58s, 48 轨道)
+verdict=PASS

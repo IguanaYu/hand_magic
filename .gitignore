@@ -1,0 +1,9 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Downloaded artifacts / scratch (GDMP release zip, extract dir, temp scripts)
+downloads/
+
+# Local agent workspace
+.zcode/

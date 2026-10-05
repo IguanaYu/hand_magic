@@ -1,0 +1,7 @@
+camera=
+datatype=-1
+frames_sent=0
+results_received=0
+hands_frames=0
+latency_ms=0.0
+verdict=FAIL:无识别回调
