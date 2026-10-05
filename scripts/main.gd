@@ -24,6 +24,7 @@ var hud: DebugHud
 var spawner: EnemySpawner
 var mini_game: MiniGame
 var battle3d: Battlefield3D
+var codex: CodexPanel
 var mode3d := false
 
 var _cam_container: SubViewportContainer
@@ -114,6 +115,9 @@ func _ready() -> void:
 		return
 	if "--shot3d" in args:
 		_build_3d()
+		# --codex 附带参数：截图前打开手势图鉴（目检面板布局）
+		if "--codex" in args:
+			codex.open()
 		# 预置敌人在镜头前，用于目检模型/朝向/动画
 		for i in 7:
 			var key := "marauder" if i % 3 == 2 else "marine"
@@ -179,11 +183,15 @@ func _build_3d() -> void:
 	battle3d.ui_layer.add_child(skeleton)
 	hud = DebugHud.new()
 	battle3d.ui_layer.add_child(hud)
-	hud.set_hint("握拳→画符→张掌 施法 | 空闲张掌/右键 护盾 | 1-5 直放法术 | R 重开 ESC 退出")
+	hud.set_hint("H 手势图鉴 ｜ F1 调试 ｜ R 重开")
+	hud.set_message("按 H 查看每个法术怎么画")
 	tracker = HandTracker.new()
 	add_child(tracker)
 	fsm = GestureFSM.new()
 	add_child(fsm)
+	codex = CodexPanel.new()
+	codex.fsm = fsm
+	battle3d.add_child(codex)
 	_wire_3d_signals()
 
 

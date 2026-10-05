@@ -7,7 +7,8 @@ extends CanvasLayer
 var info_label: Label
 var hint_label: Label
 var message_label: Label
-var visible_flag := true
+## 调试多行信息默认隐藏（F1 切换）；施法反馈 message 与操作提示 hint 常显
+var debug_visible := false
 
 var info := {}
 var hint := ""
@@ -33,9 +34,7 @@ func _init() -> void:
 	add_child(message_label)
 
 	hint_label = Label.new()
-	hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint_label.position = Vector2(240, 0)
-	hint_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	hint_label.add_theme_font_size_override("font_size", 15)
 	hint_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0, 0.9))
 	hint_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
@@ -45,8 +44,10 @@ func _init() -> void:
 
 
 func _update_layout() -> void:
+	# 不用锚点（CanvasLayer 未挂树时 preset 会算错 offset，挂树后整体漂移出屏），
+	# 纯坐标定位：底部一行小字并按文字宽度居中，让出法术快捷栏（栏底 vp.y-44）
 	var vp := DisplayServer.window_get_size()
-	hint_label.position = Vector2(vp.x * 0.5 - 360, vp.y - 46)
+	hint_label.position = Vector2(maxf(vp.x * 0.5 - hint_label.size.x * 0.5, 8.0), vp.y - 30.0)
 
 
 func set_info(dict: Dictionary) -> void:
@@ -82,18 +83,16 @@ func _process(delta: float) -> void:
 
 
 func _refresh() -> void:
-	if not visible_flag:
-		info_label.text = ""
-		message_label.text = ""
-		hint_label.text = ""
-		return
 	info_label.text = ""
-	for k in info:
-		info_label.text += "%s: %s\n" % [k, str(info[k])]
+	if debug_visible:
+		for k in info:
+			info_label.text += "%s: %s\n" % [k, str(info[k])]
 	message_label.text = message
 	hint_label.text = hint
+	hint_label.reset_size()
+	_update_layout()
 
 
 func toggle() -> void:
-	visible_flag = not visible_flag
+	debug_visible = not debug_visible
 	_refresh()

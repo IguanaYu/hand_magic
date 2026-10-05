@@ -39,6 +39,7 @@ var bullet_layer: Node3D
 var fx_layer: Node3D
 var hud3d: BattleHud
 var crosshair: Crosshair
+var spell_bar: SpellBar
 var spell_caster: SpellCaster3D
 var shield: Shield3D
 
@@ -57,6 +58,8 @@ var mana_ratio := 0.0:
 		mana_ratio = v
 		if hud3d != null:
 			hud3d.mana_ratio = v
+		if spell_bar != null:
+			spell_bar.mana = v * GestureFSM.MANA_MAX
 
 var _spawn_acc := 0.0
 var _spawn_count := 0
@@ -89,10 +92,7 @@ var _sfx_cursor := 0
 var _sfx_last := {}
 var _hitstop_cd := 0.0
 
-const SPELL_KEYS := {
-	KEY_1: "fireball", KEY_2: "lightning", KEY_3: "ice_field",
-	KEY_4: "wind_blade", KEY_5: "quick_shot",
-}
+const SPELL_KEYS := SpellCodex.SPELL_KEYS  # 数字键直放法术（数据/图鉴见 spell_codex.gd）
 
 
 func _ready() -> void:
@@ -108,6 +108,8 @@ func _ready() -> void:
 	ui_layer.add_child(hud3d)
 	crosshair = Crosshair.new()
 	ui_layer.add_child(crosshair)
+	spell_bar = SpellBar.new()
+	ui_layer.add_child(spell_bar)
 	spell_caster = SpellCaster3D.new()
 	spell_caster.battlefield = self
 	add_child(spell_caster)
@@ -256,6 +258,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and SPELL_KEYS.has(event.keycode):
 		spell_caster.cast(SPELL_KEYS[event.keycode], get_viewport().get_mouse_position())
+		spell_bar.flash(event.keycode)
 
 
 func _update_camera(delta: float) -> void:
