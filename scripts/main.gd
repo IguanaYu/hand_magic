@@ -119,6 +119,13 @@ func _ready() -> void:
 			var key := "marauder" if i % 3 == 2 else "marine"
 			var e := battle3d.spawn_enemy(key)
 			e.global_position = battle3d.PLAYER_POS + Vector3(-12.0 + i * 4.0, 0.0, -13.0 - (i % 3) * 3.0)
+		# M1.6 空军目检：维京到位盘旋 + 医疗船进场空投（截图时恰有枪兵空降）
+		var vk := battle3d.spawn_enemy("viking")
+		vk.global_position = vk._fly_target
+		vk.speed = 60.0
+		var md := battle3d.spawn_enemy("medivac")
+		md.global_position = md._fly_target - Vector3(0.0, 0.0, 6.0)
+		md.speed = 60.0
 		# 0.7s 施放火球，1.55s 截图（爆炸瞬间 + 敌人已开火）
 		get_tree().create_timer(0.7).timeout.connect(func():
 			battle3d.spell_caster.cast("fireball", Vector2(640, 520)))

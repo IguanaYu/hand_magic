@@ -177,6 +177,48 @@ func _run() -> void:
 	_check("重开重置波次：wave_n=0 回开场波间", battlefield.wave_n == 0
 		and battlefield.phase == Battlefield3D.WavePhase.INTERMISSION)
 
+	# ===== M1.6 空军单位（维京/医疗运输机） =====
+
+	# --- 维京：飞入 → 前方半圆盘旋开火 → 被击落 ---
+	var vk: EnemyUnit3D = battlefield.spawn_enemy("viking")
+	_check("维京：登记 + 高空出生 + FLY_IN（y=%.1f）" % vk.global_position.y,
+		battlefield.enemies.has(vk) and vk.global_position.y > 5.0
+		and vk.state == EnemyUnit3D.State.FLY_IN)
+	vk.global_position = vk._fly_target - Vector3(0.0, 0.0, 5.0)
+	vk.speed = 60.0
+	await get_tree().create_timer(0.4).timeout
+	_check("维京：到位后盘旋开火（%s）" % vk.state_name(), vk.state == EnemyUnit3D.State.STRAFE)
+	_check("维京：盘旋保持在玩家前方（z=%.1f）" % vk.global_position.z,
+		vk.global_position.z < battlefield.PLAYER_POS.z)
+	vk._fire_cd = 0.05
+	await get_tree().create_timer(0.5).timeout
+	_check("维京：导弹已发射（曳光弹 %d 发）" % battlefield.bullet_layer.get_child_count(),
+		battlefield.bullet_layer.get_child_count() > 0)
+	for b in battlefield.bullet_layer.get_children():
+		b.queue_free()
+	vk.take_damage(9999.0)
+	_check("维京：被击杀移除（alive=%s）" % vk.alive,
+		not vk.alive and not battlefield.enemies.has(vk))
+
+	# --- 医疗船：飞入 → 悬停空投枪兵 → 撤离 ---
+	var md: EnemyUnit3D = battlefield.spawn_enemy("medivac")
+	md.global_position = md._fly_target - Vector3(0.0, 0.0, 6.0)
+	md.speed = 60.0
+	_check("医疗船：FLY_IN 状态", md.state == EnemyUnit3D.State.FLY_IN)
+	await get_tree().create_timer(0.4).timeout
+	_check("医疗船：到位悬停空投（%s）" % md.state_name(),
+		md.state == EnemyUnit3D.State.HOVER_DROP)
+	var alive_at_drop: int = battlefield._alive_count()
+	await get_tree().create_timer(2.6).timeout
+	_check("医疗船：空投枪兵落地（存活 %d→%d）" % [alive_at_drop, battlefield._alive_count()],
+		battlefield._alive_count() >= alive_at_drop + 2)
+
+	# --- 波次表：空军曲线 ---
+	var w2 := WaveTable.wave(2)
+	var w4 := WaveTable.wave(4)
+	_check("波次表：第2波 1 运输机 0 维京 / 第4波 1 维京",
+		int(w2["medivacs"]) == 1 and int(w2["vikings"]) == 0 and int(w4["vikings"]) == 1)
+
 	_finish()
 
 

@@ -48,7 +48,7 @@ func aim(screen_pos: Vector2) -> Dictionary:
 	var dir: Vector3 = battlefield.camera.project_ray_normal(screen_pos)
 	var enemy := _ray_hit_enemy(origin, dir)
 	if enemy != null:
-		return {"enemy": enemy, "point": enemy.global_position + Vector3.UP * 0.9}
+		return {"enemy": enemy, "point": enemy.aim_center()}
 	return {"enemy": null, "point": _ground_point(origin, dir)}
 
 
@@ -75,7 +75,7 @@ func _ray_hit_enemy(origin: Vector3, dir: Vector3) -> EnemyUnit3D:
 	for e in battlefield.enemies:
 		if not e.alive:
 			continue
-		var center := e.global_position + Vector3.UP * 0.9
+		var center := e.aim_center()
 		var assist: float = clampf(AIM_BASE_RADIUS + origin.distance_to(center) * 0.02, AIM_BASE_RADIUS, AIM_MAX_RADIUS)
 		var oc := center - origin
 		var tca: float = oc.dot(dir)
@@ -104,6 +104,7 @@ func _ground_point(origin: Vector3, dir: Vector3) -> Vector3:
 # ---------- 法术 ----------
 
 func _spawn_fireball(aim: Dictionary) -> void:
+	battlefield.play_sfx("cast_fire", Vector3.INF, -4.0)
 	var fx := FireballProjectile.new()
 	fx.caster = self
 	fx.target = aim["point"]
@@ -117,7 +118,7 @@ func _apply_aoe(point: Vector3) -> void:
 	for e in battlefield.enemies:
 		if e.alive and e.global_position.distance_to(point) <= FIREBALL_RADIUS:
 			e.take_damage(FIREBALL_DMG)
-			battlefield.spawn_damage_label(e.global_position + Vector3.UP * 1.6, FIREBALL_DMG, Color(1.0, 0.7, 0.3))
+			battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, FIREBALL_DMG, Color(1.0, 0.7, 0.3))
 
 
 ## 测试/调试直入口：在指定点引爆火球 AoE
@@ -131,16 +132,18 @@ func debug_explode(point: Vector3) -> void:
 func _cast_lightning(aim: Dictionary) -> void:
 	var origin_p: Vector3 = aim["point"]
 	var targets := _nearest_enemies(origin_p, LIGHTNING_TARGETS)
+	battlefield.play_sfx("zap", origin_p, -3.0)
 	var fx := LightningFx.new()
 	fx.points.append(origin_p + Vector3.UP * 6.0)  # 从天而降
 	for t in targets:
-		fx.points.append(t.global_position + Vector3.UP * 0.9)
+		fx.points.append(t.aim_center())
 		t.take_damage(LIGHTNING_DMG)
-		battlefield.spawn_damage_label(t.global_position + Vector3.UP * 1.6, LIGHTNING_DMG, Color(0.8, 0.9, 1.0))
+		battlefield.spawn_damage_label(t.aim_center() + Vector3.UP * 0.7, LIGHTNING_DMG, Color(0.8, 0.9, 1.0))
 	battlefield.fx_layer.add_child(fx)
 
 
 func _cast_ice_field(point: Vector3) -> void:
+	battlefield.play_sfx("cast_ice", point, -3.0)
 	var fx := IceFieldFx.new()
 	fx.position = point
 	battlefield.fx_layer.add_child(fx)
@@ -151,7 +154,7 @@ func _cast_ice_field(point: Vector3) -> void:
 		if d <= ICE_RADIUS:
 			e.apply_freeze(2.0 if e.unit_key == "marauder" else 3.0)
 			e.take_damage(ICE_DMG)
-			battlefield.spawn_damage_label(e.global_position + Vector3.UP * 1.6, ICE_DMG, Color(0.6, 0.9, 1.0))
+			battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, ICE_DMG, Color(0.6, 0.9, 1.0))
 
 
 func _cast_wind_blade(screen_pos: Vector2) -> void:
@@ -159,6 +162,7 @@ func _cast_wind_blade(screen_pos: Vector2) -> void:
 	var dir: Vector3 = battlefield.camera.project_ray_normal(screen_pos)
 	dir.y = 0.0
 	dir = dir.normalized()
+	battlefield.play_sfx("cast_wind", Vector3.INF, -3.0)
 	var fx := WindBladeFx.new()
 	fx.setup(battlefield.PLAYER_POS, dir)
 	battlefield.fx_layer.add_child(fx)
@@ -174,7 +178,7 @@ func _cast_wind_blade(screen_pos: Vector2) -> void:
 			continue
 		e.take_damage(WIND_DMG)
 		e.knockback(rel.normalized(), WIND_KNOCKBACK)
-		battlefield.spawn_damage_label(e.global_position + Vector3.UP * 1.6, WIND_DMG, Color(0.75, 1.0, 0.7))
+		battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, WIND_DMG, Color(0.75, 1.0, 0.7))
 
 
 func _cast_quick_shot() -> void:
@@ -189,9 +193,10 @@ func _cast_quick_shot() -> void:
 			nearest = e
 	if nearest == null:
 		return
+	battlefield.play_sfx("bolt", Vector3.INF, -4.0)
 	var fx := FireballProjectile.new()
 	fx.caster = self
-	fx.target = nearest.global_position + Vector3.UP * 0.9
+	fx.target = nearest.aim_center()
 	fx.speed = 40.0
 	fx.radius = 0.18
 	fx.single_target = nearest
@@ -258,7 +263,7 @@ class FireballProjectile:
 		var bf := caster.battlefield
 		if single_target != null and single_target.alive:
 			single_target.take_damage(damage)
-			bf.spawn_damage_label(single_target.global_position + Vector3.UP * 1.6, damage, Color(1.0, 0.7, 0.3))
+			bf.spawn_damage_label(single_target.aim_center() + Vector3.UP * 0.7, damage, Color(1.0, 0.7, 0.3))
 		else:
 			caster._apply_aoe(target)
 		var boom := ExplosionFx.new()
@@ -266,6 +271,7 @@ class FireballProjectile:
 		boom.radius = aoe_radius if single_target == null else 1.0
 		bf.fx_layer.add_child(boom)
 		bf.add_camera_shake(0.15)
+		bf.play_sfx("boom", target, -5.0)
 		queue_free()
 
 
@@ -318,6 +324,9 @@ class LightningFx:
 	var _mesh: ImmediateMesh
 
 	func _ready() -> void:
+		if points.size() < 2:
+			queue_free()  # 没劈中任何目标：无折线可画
+			return
 		_mesh = ImmediateMesh.new()
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

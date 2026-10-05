@@ -1,7 +1,7 @@
 [PASS] 场景构建：相机/敌人层/HUD 存在
 [PASS] 生成枪兵：登记 + 状态 ADVANCE
-[PASS] 前进：0.7s 直线推进（d0=34.1 d1=9.8）
-[PASS] 两段路径①：先朝中间集结点走（x=20→15.6）
+[PASS] 前进：0.7s 直线推进（d0=34.0 d1=9.9）
+[PASS] 两段路径①：先朝中间集结点走（x=20→15.7）
 [PASS] 两段路径②：集结完成后朝玩家走
 [PASS] 进停距：停止线切 HALT/FIRE（HALT）
 [PASS] 致死伤害：died 触发 + 从列表移除
@@ -20,4 +20,13 @@
 [PASS] 波间到点开波：第 1 波进入 SPAWNING（1）
 [PASS] 清场：+50 分进波间，wave_cleared 信号（n=1）
 [PASS] 重开重置波次：wave_n=0 回开场波间
--------- battle3d 测试: 22 PASS / 0 FAIL --------
+[PASS] 维京：登记 + 高空出生 + FLY_IN（y=13.8）
+[PASS] 维京：到位后盘旋开火（STRAFE）
+[PASS] 维京：盘旋保持在玩家前方（z=-13.9）
+[PASS] 维京：导弹已发射（曳光弹 2 发）
+[PASS] 维京：被击杀移除（alive=false）
+[PASS] 医疗船：FLY_IN 状态
+[PASS] 医疗船：到位悬停空投（HOVER_DROP）
+[PASS] 医疗船：空投枪兵落地（存活 1→5）
+[PASS] 波次表：第2波 1 运输机 0 维京 / 第4波 1 维京
+-------- battle3d 测试: 31 PASS / 0 FAIL --------
