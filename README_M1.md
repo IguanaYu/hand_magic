@@ -4,6 +4,12 @@
 > Godot 4.6.1（Forward+）+ GDMP v0.6 + CarBot 风星际 3D 素材包。
 > 设计与里程碑文档：`docs/m1-plan.md` + `docs/m1-0 ~ m1-6`。
 
+## 素材版权说明
+
+- `素材/starcrafts_carbot_kit/` 为**个人同人习作**（Blender 脚本生成的 CarBot《StarCrafts》风格 3D 资产），游戏实际使用的子集在 `assets3d/`
+- StarCraft（星际争霸）IP 归 **暴雪娱乐** 所有；CarBot 画风版权归 **Carbot Animations**
+- 本仓库仅作**个人学习与开发备份**：素材请勿商用、勿再分发；如需公开传播本项目，请先自行确认授权或替换素材
+
 ## 运行
 
 ```bash
