@@ -415,43 +415,58 @@ class IceFieldFx:
 			queue_free()
 
 
-## 风刃：正面扇形弧面扫过
+## 风刃：竖直弧面气浪墙，沿施法方向从玩家身前扫出。
+## （旧版是悬在玩家头顶上方的水平扇面——第一人称下糊成横跨天空的弧面，
+## 被看成"天上的圆柱"，故改为贴地竖直风墙）
 class WindBladeFx:
 	extends Node3D
+	const SPAN_DEG := 110.0   # 弧面总张角（伤害判定锥 120°，视觉略收）
+	const H_MIN := 0.15
+	const H_MAX := 2.4
+	const RADIUS := 1.4
 	var _t := 0.0
-	var _mesh: ImmediateMesh
+	var _dir := Vector3.FORWARD
+	var _origin := Vector3.ZERO
+	var _mat: StandardMaterial3D
 
 	func setup(origin: Vector3, dir: Vector3) -> void:
-		position = origin + Vector3.UP * 1.0
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.albedo_color = Color(0.8, 1.0, 0.85, 0.5)
-		mat.emission_enabled = true
-		mat.emission = Color(0.7, 1.0, 0.8)
-		mat.emission_energy_multiplier = 2.5
-		mat.vertex_color_use_as_albedo = true
-		_mesh = ImmediateMesh.new()
-		_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, mat)
-		var segments := 16
-		var r := SpellCaster3D.WIND_RANGE
+		_dir = dir
+		_origin = Vector3(origin.x, 0.0, origin.z)
+		position = _origin
+		_mat = StandardMaterial3D.new()
+		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_mat.albedo_color = Color(0.8, 1.0, 0.85, 0.55)
+		_mat.emission_enabled = true
+		_mat.emission = Color(0.7, 1.0, 0.8)
+		_mat.emission_energy_multiplier = 1.8
+		_mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # 双面渲染：贴脸时从内侧也可见
+		var mesh := ImmediateMesh.new()
+		mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat)
+		var base_a := atan2(dir.x, dir.z)
+		var segments := 12
 		for i in range(segments):
-			var a0 := atan2(dir.x, dir.z) - deg_to_rad(60.0) + TAU * i / segments * (120.0 / 360.0)
-			var a1 := atan2(dir.x, dir.z) - deg_to_rad(60.0) + TAU * (i + 1) / segments * (120.0 / 360.0)
-			var v0 := Vector3(sin(a0), 0.0, cos(a0)) * r
-			var v1 := Vector3(sin(a1), 0.0, cos(a1)) * r
-			_mesh.surface_set_color(Color(0.8, 1.0, 0.85, 0.25))
-			_mesh.surface_add_vertex(Vector3.ZERO)
-			_mesh.surface_add_vertex(v0)
-			_mesh.surface_add_vertex(v1)
-		_mesh.surface_end()
+			var a0 := base_a + deg_to_rad(SPAN_DEG) * (float(i) / segments - 0.5)
+			var a1 := base_a + deg_to_rad(SPAN_DEG) * (float(i + 1) / segments - 0.5)
+			var p0 := Vector3(sin(a0), 0.0, cos(a0)) * RADIUS
+			var p1 := Vector3(sin(a1), 0.0, cos(a1)) * RADIUS
+			# 每段一个竖直 quad：底边贴地、顶边齐眉
+			mesh.surface_add_vertex(p0 + Vector3.UP * H_MIN)
+			mesh.surface_add_vertex(p0 + Vector3.UP * H_MAX)
+			mesh.surface_add_vertex(p1 + Vector3.UP * H_MAX)
+			mesh.surface_add_vertex(p0 + Vector3.UP * H_MIN)
+			mesh.surface_add_vertex(p1 + Vector3.UP * H_MAX)
+			mesh.surface_add_vertex(p1 + Vector3.UP * H_MIN)
+		mesh.surface_end()
 		var mi := MeshInstance3D.new()
-		mi.mesh = _mesh
+		mi.mesh = mesh
 		add_child(mi)
 
 	func _process(delta: float) -> void:
 		_t += delta
 		var p := clampf(_t / 0.3, 0.0, 1.0)
-		scale = Vector3(p, p, p)
-		if _t > 0.3:
+		# 气浪墙沿施法方向推出 WIND_RANGE 远，同时展开并消隐
+		global_position = _origin + _dir * (p * WIND_RANGE)
+		_mat.albedo_color.a = 0.55 * (1.0 - p)
+		if _t > 0.32:
 			queue_free()

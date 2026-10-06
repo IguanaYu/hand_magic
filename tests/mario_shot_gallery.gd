@@ -135,4 +135,17 @@ func _run() -> void:
 	await get_tree().create_timer(3.0).timeout  # _victory 内部 2.2s 后弹面板
 	await _shot("09_victory")
 
+	# ===== 10 风刃：竖直气浪墙扫过栗宝宝（重置结算浮层再摆拍） =====
+	battlefield._overlay.visible = false
+	battlefield.is_over = false
+	battlefield.spawning = false
+	_clear_field()
+	for i in 3:
+		var wg := battlefield.spawn_enemy("goomba")
+		wg.global_position = Vector3(-2.0 + i * 2.0, 0.0, 2.0)  # 6m 内：风刃射程中
+	await get_tree().create_timer(0.2).timeout
+	sc._cast_wind_blade(battlefield.camera.unproject_position(Vector3(0.0, 0.8, 2.0)))
+	await get_tree().create_timer(0.1).timeout  # 气浪墙扫到怪身上
+	await _shot("10_wind_blade")
+
 	get_tree().quit(0)
