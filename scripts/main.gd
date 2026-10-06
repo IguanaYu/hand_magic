@@ -85,6 +85,9 @@ func _ready() -> void:
 	if "--anim-probe" in args:
 		add_child(load("res://tests/anim_probe.gd").new())
 		return
+	if "--anim-probe-mario" in args:
+		add_child(load("res://tests/anim_probe_mario.gd").new())
+		return
 	if "--smoke-test" in args:
 		var code := SmokeTest.run()
 		get_tree().quit(code)
@@ -115,22 +118,36 @@ func _ready() -> void:
 		get_tree().create_timer(8.0).timeout.connect(_finish_camera_test)
 		return
 	if "--shot3d" in args:
-		_build_3d()
+		_build_3d("--mario" in args)
 		# --codex 附带参数：截图前打开手势图鉴（目检面板布局）
 		if "--codex" in args:
 			codex.open()
-		# 预置敌人在镜头前，用于目检模型/朝向/动画
-		for i in 7:
-			var key := "marauder" if i % 3 == 2 else "marine"
-			var e := battle3d.spawn_enemy(key)
-			e.global_position = battle3d.PLAYER_POS + Vector3(-12.0 + i * 4.0, 0.0, -13.0 - (i % 3) * 3.0)
-		# M1.6 空军目检：维京到位盘旋 + 医疗船进场空投（截图时恰有枪兵空降）
-		var vk := battle3d.spawn_enemy("viking")
-		vk.global_position = vk._fly_target
-		vk.speed = 60.0
-		var md := battle3d.spawn_enemy("medivac")
-		md.global_position = md._fly_target - Vector3(0.0, 0.0, 6.0)
-		md.speed = 60.0
+		if "--mario" in args:
+			# 马里奥全家福：栗宝宝排排站 + 慢慢龟 + 幽灵 + 库巴压轴
+			for i in 5:
+				var g := battle3d.spawn_enemy("goomba")
+				g.global_position = Vector3(-8.0 + i * 4.0, 0.0, -12.0)
+			var kp := battle3d.spawn_enemy("koopa")
+			kp.global_position = Vector3(6.0, 0.0, -16.0)
+			var b1 := battle3d.spawn_enemy("boo")
+			b1.global_position = Vector3(-6.0, MarioEnemy3D.BOO_HOVER, -18.0)
+			var b2 := battle3d.spawn_enemy("boo")
+			b2.global_position = Vector3(7.0, MarioEnemy3D.BOO_HOVER + 0.6, -21.0)
+			var bs := battle3d.spawn_enemy("bowser")
+			bs.global_position = Vector3(0.0, 0.0, -25.0)
+		else:
+			# 预置敌人在镜头前，用于目检模型/朝向/动画
+			for i in 7:
+				var key := "marauder" if i % 3 == 2 else "marine"
+				var e := battle3d.spawn_enemy(key)
+				e.global_position = battle3d.PLAYER_POS + Vector3(-12.0 + i * 4.0, 0.0, -13.0 - (i % 3) * 3.0)
+			# M1.6 空军目检：维京到位盘旋 + 医疗船进场空投（截图时恰有枪兵空降）
+			var vk := battle3d.spawn_enemy("viking")
+			vk.global_position = vk._fly_target
+			vk.speed = 60.0
+			var md := battle3d.spawn_enemy("medivac")
+			md.global_position = md._fly_target - Vector3(0.0, 0.0, 6.0)
+			md.speed = 60.0
 		# 0.7s 施放火球，1.55s 截图（爆炸瞬间 + 敌人已开火）
 		get_tree().create_timer(0.7).timeout.connect(func():
 			battle3d.spell_caster.cast("fireball", Vector2(640, 520)))
@@ -142,24 +159,36 @@ func _ready() -> void:
 		sg.battlefield = battle3d
 		add_child(sg)
 		return
+	if "--mario-gallery" in args:
+		_build_3d(true)
+		var mg: Node = load("res://tests/mario_shot_gallery.gd").new()
+		mg.battlefield = battle3d
+		add_child(mg)
+		return
 	if "--battle3d-test" in args:
 		_build_3d()
 		var bt: Node = load("res://tests/battle3d_test.gd").new()
 		bt.battlefield = battle3d
 		add_child(bt)
 		return
+	if "--mario-test" in args:
+		_build_3d(true)
+		var mt: Node = load("res://tests/mario_battle_test.gd").new()
+		mt.battlefield = battle3d
+		add_child(mt)
+		return
 	_gui_test = "--gui-test" in args
-	# 默认 = 3D 战场；--ward = 旧守卫法阵（M0.5）；e2e/practice 走练习靶
+	# 默认 = 3D 战场（--mario 切马里奥换皮）；--ward = 旧守卫法阵（M0.5）；e2e/practice 走练习靶
 	mode3d = not practice_mode and "--ward" not in args
 	if mode3d:
-		_build_3d()
+		_build_3d("--mario" in args)
 		return
 	_build_scene()
 	_wire_signals()
 
 
-func _build_3d() -> void:
-	battle3d = Battlefield3D.new()
+func _build_3d(mario := false) -> void:
+	battle3d = BattlefieldMario3D.new() if mario else Battlefield3D.new()
 	battle3d.name = "Battlefield3D"
 	add_child(battle3d)
 	# 摄像头管线：离屏 SubViewport（modulate 全透明——只供手部追踪读帧，不上屏）。

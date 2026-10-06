@@ -321,6 +321,16 @@ func take_damage(dmg: float) -> bool:
 	return false
 
 
+## 元素伤害入口（法术统一走这里）：默认=直伤+冰冻减速，行为与旧直伤路径一致；
+## 马里奥单位（MarioEnemy3D）覆写实现元素克制表（GDD §3）。
+## 返回实际伤害：>0=受伤数值（飘字用），0=无伤，<0=免疫（飘"免疫"）。
+func apply_spell(element: String, dmg: float, _dir: Vector3 = Vector3.ZERO) -> float:
+	take_damage(dmg)
+	if element == "ice":
+		apply_freeze(2.0 if unit_key == "marauder" else 3.0)
+	return dmg
+
+
 # ---------- 命中反馈（模型自发光闪 + 缩放冲击） ----------
 
 func _collect_flash_mats(node: Node) -> void:

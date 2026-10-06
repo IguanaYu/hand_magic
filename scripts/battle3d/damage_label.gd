@@ -11,6 +11,18 @@ func setup(p_world: Vector3, p_camera: Camera3D, dmg: float, col: Color) -> void
 	world_pos = p_world
 	camera = p_camera
 	text = "%d" % roundi(dmg)
+	_common(col)
+
+
+## 文本飘字（"免疫"/"闪!"/"连锁!" 等非数值提示）
+func setup_text(p_world: Vector3, p_camera: Camera3D, txt: String, col: Color) -> void:
+	world_pos = p_world
+	camera = p_camera
+	text = txt
+	_common(col)
+
+
+func _common(col: Color) -> void:
 	add_theme_font_size_override("font_size", 20)
 	add_theme_color_override("font_color", col)
 	add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))

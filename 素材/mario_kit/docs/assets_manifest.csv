@@ -1,0 +1,21 @@
+﻿key,cn,en,group,single_png,glb_node
+mario,马力欧,Mario,heroes,singles/mario.png,mario
+luigi,路易吉,Luigi,heroes,singles/luigi.png,luigi
+toad,奇诺比奥,Toad,heroes,singles/toad.png,toad
+yoshi,耀西,Yoshi,heroes,singles/yoshi.png,yoshi
+bowser,库巴,Bowser,heroes,singles/bowser.png,bowser
+peach,碧琪公主,Princess Peach,heroes,singles/peach.png,peach
+goomba,栗宝宝,Goomba,enemies,singles/goomba.png,goomba
+koopa,慢慢龟,Koopa Troopa,enemies,singles/koopa.png,koopa
+shyguy,嘿呵,Shy Guy,enemies,singles/shyguy.png,shyguy
+boo,害羞幽灵,Boo,enemies,singles/boo.png,boo
+piranha,吞食花,Piranha Plant,enemies,singles/piranha.png,piranha
+mushroom,超级蘑菇,Super Mushroom,items,singles/mushroom.png,mushroom
+star,无敌星星,Super Star,items,singles/star.png,star
+coin,金币,Coin,items,singles/coin.png,coin
+qblock,问号砖块,? Block,items,singles/qblock.png,qblock
+shell,龟壳,Shell,items,singles/shell.png,shell
+pipe,水管,Warp Pipe,items,singles/pipe.png,pipe
+brick,普通砖块,Brick Block,items,singles/brick.png,brick
+fireflower,火之花,Fire Flower,items,singles/fireflower.png,fireflower
+onepup,1UP蘑菇,1-Up Mushroom,items,singles/onepup.png,onepup

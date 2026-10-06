@@ -75,6 +75,9 @@ func _ray_hit_enemy(origin: Vector3, dir: Vector3) -> EnemyUnit3D:
 	for e in battlefield.enemies:
 		if not e.alive:
 			continue
+		# 隐身中的幽灵不可被瞄准（链电不吃这套：走 _nearest_enemies 全量扫描）
+		if "is_stealthed" in e and e.is_stealthed():
+			continue
 		var center := e.aim_center()
 		var assist: float = clampf(AIM_BASE_RADIUS + origin.distance_to(center) * 0.02, AIM_BASE_RADIUS, AIM_MAX_RADIUS)
 		var oc := center - origin
@@ -113,12 +116,24 @@ func _spawn_fireball(aim: Dictionary) -> void:
 	battlefield.fx_layer.add_child(fx)
 
 
-## 火球 AoE 伤害判定（爆炸点 r2.5m 内敌人 40 伤）
+## 火球 AoE 伤害判定（爆炸点 r2.5m 内敌人 40 伤；马里奥单位走元素克制表）
 func _apply_aoe(point: Vector3) -> void:
 	for e in battlefield.enemies:
 		if e.alive and e.global_position.distance_to(point) <= FIREBALL_RADIUS:
-			e.take_damage(FIREBALL_DMG)
-			battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, FIREBALL_DMG, Color(1.0, 0.7, 0.3))
+			var dir: Vector3 = e.global_position - point
+			dir.y = 0.0
+			_hit_enemy(e, "fire", FIREBALL_DMG, dir, Color(1.0, 0.7, 0.3))
+
+
+## 统一伤害入口：马里奥单位（MarioEnemy3D）走 apply_spell 克制表，旧单位=直伤。
+## 返回实际伤害（<0=免疫）：免疫/无伤由 apply_spell 方决定飘字
+func _hit_enemy(e: EnemyUnit3D, element: String, dmg: float, dir := Vector3.ZERO, col := Color(1.0, 0.7, 0.3)) -> float:
+	var dealt: float = e.apply_spell(element, dmg, dir)
+	if dealt < 0.0:
+		battlefield.spawn_text_label(e.aim_center() + Vector3.UP * 0.7, "免疫", Color(0.75, 0.85, 0.95))
+	elif dealt > 0.0:
+		battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, dealt, col)
+	return dealt
 
 
 ## 测试/调试直入口：在指定点引爆火球 AoE
@@ -137,8 +152,7 @@ func _cast_lightning(aim: Dictionary) -> void:
 	fx.points.append(origin_p + Vector3.UP * 6.0)  # 从天而降
 	for t in targets:
 		fx.points.append(t.aim_center())
-		t.take_damage(LIGHTNING_DMG)
-		battlefield.spawn_damage_label(t.aim_center() + Vector3.UP * 0.7, LIGHTNING_DMG, Color(0.8, 0.9, 1.0))
+		_hit_enemy(t, "lightning", LIGHTNING_DMG, Vector3.ZERO, Color(0.8, 0.9, 1.0))
 	battlefield.fx_layer.add_child(fx)
 
 
@@ -152,9 +166,9 @@ func _cast_ice_field(point: Vector3) -> void:
 			continue
 		var d := e.global_position.distance_to(point)
 		if d <= ICE_RADIUS:
-			e.apply_freeze(2.0 if e.unit_key == "marauder" else 3.0)
-			e.take_damage(ICE_DMG)
-			battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, ICE_DMG, Color(0.6, 0.9, 1.0))
+			var dir: Vector3 = e.global_position - point
+			dir.y = 0.0
+			_hit_enemy(e, "ice", ICE_DMG, dir, Color(0.6, 0.9, 1.0))
 
 
 func _cast_wind_blade(screen_pos: Vector2) -> void:
@@ -176,9 +190,9 @@ func _cast_wind_blade(screen_pos: Vector2) -> void:
 			continue
 		if rel.normalized().dot(dir) < cos(deg_to_rad(60.0)):
 			continue
-		e.take_damage(WIND_DMG)
-		e.knockback(rel.normalized(), WIND_KNOCKBACK)
-		battlefield.spawn_damage_label(e.aim_center() + Vector3.UP * 0.7, WIND_DMG, Color(0.75, 1.0, 0.7))
+		var dealt := _hit_enemy(e, "wind", WIND_DMG, rel.normalized(), Color(0.75, 1.0, 0.7))
+		if dealt > 0.0:
+			e.knockback(rel.normalized(), WIND_KNOCKBACK)
 
 
 func _cast_quick_shot() -> void:
@@ -229,6 +243,7 @@ class FireballProjectile:
 	var aoe_radius := FIREBALL_RADIUS
 	var single_target: EnemyUnit3D = null
 	var color := Color(1.0, 0.35, 0.1)
+	var _dodge_warned := false
 
 	func _ready() -> void:
 		var mesh := MeshInstance3D.new()
@@ -252,6 +267,14 @@ class FireballProjectile:
 			_explode()
 			return
 		global_position += to.normalized() * step
+		# 临近命中（≤0.4s）时预警幽灵闪避：落点在闪避半径内的 boo 隐身侧开
+		if not _dodge_warned and caster != null:
+			var remain := (target - global_position).length()
+			if remain / speed <= 0.4:
+				_dodge_warned = true
+				for e in caster.battlefield.enemies:
+					if e.has_method("try_dodge_fire"):
+						e.try_dodge_fire(target)
 		if single_target != null and not single_target.alive:
 			_explode()  # 目标已死，原地补爆
 			return
@@ -262,8 +285,9 @@ class FireballProjectile:
 			return
 		var bf := caster.battlefield
 		if single_target != null and single_target.alive:
-			single_target.take_damage(damage)
-			bf.spawn_damage_label(single_target.aim_center() + Vector3.UP * 0.7, damage, Color(1.0, 0.7, 0.3))
+			var flight := (target - global_position)
+			flight.y = 0.0
+			caster._hit_enemy(single_target, "fire", damage, flight, Color(1.0, 0.5, 0.2))
 		else:
 			caster._apply_aoe(target)
 		var boom := ExplosionFx.new()

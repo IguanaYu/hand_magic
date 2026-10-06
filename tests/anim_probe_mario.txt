@@ -1,0 +1,19 @@
+goomba 动画(2): goomba_idle, goomba_move
+goomba 尺寸: (0.555438, 0.432, 0.436378)
+koopa 动画(2): koopa_idle, koopa_move
+koopa 尺寸: (0.56, 0.378, 0.5152)
+shell 动画(1): shell_move
+shell 尺寸: (0.56, 0.312, 0.56)
+bowser 动画(2): bowser_idle, bowser_move
+bowser 尺寸: (0.708385, 0.684, 0.520592)
+boo 动画(2): boo_idle, boo_move
+boo 尺寸: (0.447212, 0.512599, 0.399397)
+coin 动画(1): coin_idle
+coin 尺寸: (0.331475, 0.34, 0.052)
+pipe 动画: 无（纯静态）
+pipe 尺寸: (0.49, 0.62, 0.49)
+qblock 动画: 无（纯静态）
+qblock 尺寸: (0.3, 0.3, 0.3)
+brick 动画: 无（纯静态）
+brick 尺寸: (0.3, 0.3, 0.3)
+verdict=PASS

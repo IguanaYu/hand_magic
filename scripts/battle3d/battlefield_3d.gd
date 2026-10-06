@@ -104,6 +104,14 @@ func _ready() -> void:
 	_build_layers()
 	_setup_camera()
 	_build_sfx_pool()
+	_build_combat_ui()
+	_build_overlay()
+	_load_best()
+	_show_banner("守住阵地！")
+
+
+## HUD/施法器/护盾构建（_ready 中抽出，马里奥战场 BattlefieldMario3D 复用）
+func _build_combat_ui() -> void:
 	hud3d = BattleHud.new()
 	ui_layer.add_child(hud3d)
 	crosshair = Crosshair.new()
@@ -116,9 +124,6 @@ func _ready() -> void:
 	shield = Shield3D.new()
 	shield.setup(PLAYER_POS)
 	add_child(shield)
-	_build_overlay()
-	_load_best()
-	_show_banner("守住阵地！")
 
 
 func _process(delta: float) -> void:
@@ -367,6 +372,13 @@ func spawn_bullet(from: Vector3, target: Vector3, dmg: float, speed: float, big:
 func spawn_damage_label(world_pos: Vector3, dmg: float, col: Color) -> void:
 	var dl := DamageLabel.new()
 	dl.setup(world_pos, camera, dmg, col)
+	ui_layer.add_child(dl)
+
+
+## 文本飘字（免疫/闪避/连锁等提示）
+func spawn_text_label(world_pos: Vector3, txt: String, col: Color) -> void:
+	var dl := DamageLabel.new()
+	dl.setup_text(world_pos, camera, txt, col)
 	ui_layer.add_child(dl)
 
 

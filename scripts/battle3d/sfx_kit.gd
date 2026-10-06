@@ -63,6 +63,8 @@ static func _build(key: String) -> PackedFloat32Array:
 			return _seq([_tone(660.0, 660.0, 0.16, 0.4, "sine", 4.0), _tone(880.0, 880.0, 0.3, 0.4, "sine", 3.0)], 0.03)
 		"lose":         # 阵亡
 			return _seq([_tone(392.0, 392.0, 0.25, 0.4, "sine", 3.0), _tone(311.0, 311.0, 0.25, 0.4, "sine", 3.0), _tone(233.0, 220.0, 0.4, 0.4, "sine", 2.0)], 0.02)
+		"coin":         # 金币叮（B5→E6 双音方波，马里奥味）
+			return _seq([_tone(988.0, 988.0, 0.07, 0.4, "square", 8.0), _tone(1319.0, 1319.0, 0.24, 0.4, "square", 6.0)], 0.0)
 	return PackedFloat32Array()
 
 
