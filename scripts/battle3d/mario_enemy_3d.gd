@@ -145,6 +145,14 @@ func _process_walker(delta: float) -> void:
 			_play("idle")
 
 
+## mario_kit 模型正面朝本地 +Z，与 CarBot（-Z）相反：不能沿用父类的 +PI 修正，
+## 否则走路时背对行进方向（用户实测"倒着走"）
+func _face_to(d: Vector3) -> void:
+	d.y = 0.0
+	if d.length_squared() > 0.001:
+		rotation.y = atan2(d.x, d.z)
+
+
 # ---------- 行为：幽灵 ----------
 
 func _process_boo(delta: float) -> void:

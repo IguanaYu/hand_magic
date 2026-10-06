@@ -667,6 +667,10 @@ func _dump_enemy_anim() -> void:
 		if ap != null:
 			print("ENEMY ", e.unit_key, " state=", e.state_name(), " anim=", ap.current_animation,
 				" pos=", "%.3f" % ap.current_animation_position, " playing=", ap.is_playing())
+		# 马里奥朝向验证：walk_dir（+1=朝世界+x=屏幕右）与位置对照截图
+		if e is MarioEnemy3D:
+			var me := e as MarioEnemy3D
+			print("MARIO ", me.unit_key, " walk_dir=", me.walk_dir, " pos=", me.global_position)
 
 
 func _finish_camera_test() -> void:
