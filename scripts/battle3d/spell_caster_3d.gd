@@ -19,6 +19,8 @@ const AIM_BASE_RADIUS := 0.8
 const AIM_MAX_RADIUS := 1.6
 
 var battlefield: Battlefield3D
+## 风刃射程（默认 8m 贴身警戒；马里奥广场怪不近身，战场覆写为 22m 够得着巡逻区）
+var wind_range := WIND_RANGE
 
 
 func cast(spell_id: String, screen_pos: Vector2) -> void:
@@ -118,7 +120,8 @@ func _spawn_fireball(aim: Dictionary) -> void:
 
 ## 火球 AoE 伤害判定（爆炸点 r2.5m 内敌人 40 伤；马里奥单位走元素克制表）
 func _apply_aoe(point: Vector3) -> void:
-	for e in battlefield.enemies:
+	# duplicate：击杀回调会当场把死者从 enemies 移除，遍历原数组会跳过下一只
+	for e in battlefield.enemies.duplicate():
 		if e.alive and e.global_position.distance_to(point) <= FIREBALL_RADIUS:
 			var dir: Vector3 = e.global_position - point
 			dir.y = 0.0
@@ -161,10 +164,11 @@ func _cast_ice_field(point: Vector3) -> void:
 	var fx := IceFieldFx.new()
 	fx.position = point
 	battlefield.fx_layer.add_child(fx)
-	for e in battlefield.enemies:
+	# duplicate：同 _apply_aoe，冰域冻杀会移除元素打断遍历
+	for e in battlefield.enemies.duplicate():
 		if not e.alive:
 			continue
-		var d := e.global_position.distance_to(point)
+		var d: float = e.global_position.distance_to(point)
 		if d <= ICE_RADIUS:
 			var dir: Vector3 = e.global_position - point
 			dir.y = 0.0
@@ -178,15 +182,17 @@ func _cast_wind_blade(screen_pos: Vector2) -> void:
 	dir = dir.normalized()
 	battlefield.play_sfx("cast_wind", Vector3.INF, -3.0)
 	var fx := WindBladeFx.new()
+	fx.wind_range = wind_range
 	fx.setup(battlefield.PLAYER_POS, dir)
 	battlefield.fx_layer.add_child(fx)
-	for e in battlefield.enemies:
+	# duplicate：同 _apply_aoe，风刃斩杀会移除元素打断遍历
+	for e in battlefield.enemies.duplicate():
 		if not e.alive:
 			continue
-		var rel := e.global_position - battlefield.PLAYER_POS
+		var rel: Vector3 = e.global_position - battlefield.PLAYER_POS
 		rel.y = 0.0
 		var dist: float = rel.length()
-		if dist > WIND_RANGE:
+		if dist > wind_range:
 			continue
 		if rel.normalized().dot(dir) < cos(deg_to_rad(60.0)):
 			continue
@@ -415,41 +421,54 @@ class IceFieldFx:
 			queue_free()
 
 
-## 风刃：竖直弧面气浪墙，沿施法方向从玩家身前扫出。
-## （旧版是悬在玩家头顶上方的水平扇面——第一人称下糊成横跨天空的弧面，
-## 被看成"天上的圆柱"，故改为贴地竖直风墙）
+## 风刃：竖直新月形气浪刃（窄弧高墙 + 主刃/残影双层 + 轻微侧倾），
+## 沿施法方向高速切出并消隐。旧版先是头顶水平扇面（糊在天空）、
+## 后是宽弧墙（曲率不可见，读成"方块"）——窄新月最接近"一刀挥出去"的读形。
 class WindBladeFx:
 	extends Node3D
-	const SPAN_DEG := 110.0   # 弧面总张角（伤害判定锥 120°，视觉略收）
-	const H_MIN := 0.15
-	const H_MAX := 2.4
-	const RADIUS := 1.4
+	const SPAN_DEG := 50.0    # 新月弧度：2.4m 半径上弦宽约 2m，曲率可辨
+	const H_MIN := 0.25
+	const H_MAX := 3.0
+	const RADIUS := 2.4
+	const DUR := 0.28
 	var _t := 0.0
 	var _dir := Vector3.FORWARD
 	var _origin := Vector3.ZERO
-	var _mat: StandardMaterial3D
+	var wind_range := WIND_RANGE
+	var _main_mat: StandardMaterial3D
+	var _echo_mat: StandardMaterial3D
+	var _echo: MeshInstance3D
 
 	func setup(origin: Vector3, dir: Vector3) -> void:
 		_dir = dir
 		_origin = Vector3(origin.x, 0.0, origin.z)
-		position = _origin
-		_mat = StandardMaterial3D.new()
-		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_mat.albedo_color = Color(0.8, 1.0, 0.85, 0.55)
-		_mat.emission_enabled = true
-		_mat.emission = Color(0.7, 1.0, 0.8)
-		_mat.emission_energy_multiplier = 1.8
-		_mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # 双面渲染：贴脸时从内侧也可见
+		rotation.y = atan2(dir.x, dir.z)
+		_main_mat = _make_mat(0.7, 2.4)
+		_echo_mat = _make_mat(0.32, 1.4)
+		add_child(_make_ribbon(_main_mat, RADIUS))
+		_echo = _make_ribbon(_echo_mat, RADIUS * 0.72)
+		add_child(_echo)
+
+	func _make_mat(alpha: float, energy: float) -> StandardMaterial3D:
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(0.82, 1.0, 0.86, alpha)
+		m.emission_enabled = true
+		m.emission = Color(0.7, 1.0, 0.8)
+		m.emission_energy_multiplier = energy
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED  # 双面：贴脸施法从内侧也可见
+		return m
+
+	func _make_ribbon(mat: StandardMaterial3D, radius: float) -> MeshInstance3D:
 		var mesh := ImmediateMesh.new()
-		mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _mat)
-		var base_a := atan2(dir.x, dir.z)
-		var segments := 12
+		mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, mat)
+		var segments := 10
 		for i in range(segments):
-			var a0 := base_a + deg_to_rad(SPAN_DEG) * (float(i) / segments - 0.5)
-			var a1 := base_a + deg_to_rad(SPAN_DEG) * (float(i + 1) / segments - 0.5)
-			var p0 := Vector3(sin(a0), 0.0, cos(a0)) * RADIUS
-			var p1 := Vector3(sin(a1), 0.0, cos(a1)) * RADIUS
+			var a0 := deg_to_rad(SPAN_DEG) * (float(i) / segments - 0.5)
+			var a1 := deg_to_rad(SPAN_DEG) * (float(i + 1) / segments - 0.5)
+			var p0 := Vector3(sin(a0), 0.0, cos(a0)) * radius
+			var p1 := Vector3(sin(a1), 0.0, cos(a1)) * radius
 			# 每段一个竖直 quad：底边贴地、顶边齐眉
 			mesh.surface_add_vertex(p0 + Vector3.UP * H_MIN)
 			mesh.surface_add_vertex(p0 + Vector3.UP * H_MAX)
@@ -460,13 +479,16 @@ class WindBladeFx:
 		mesh.surface_end()
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
-		add_child(mi)
+		mi.rotation.z = randf_range(-0.15, 0.15)  # 轻微侧倾，像挥砍的弧
+		return mi
 
 	func _process(delta: float) -> void:
 		_t += delta
-		var p := clampf(_t / 0.3, 0.0, 1.0)
-		# 气浪墙沿施法方向推出 WIND_RANGE 远，同时展开并消隐
-		global_position = _origin + _dir * (p * WIND_RANGE)
-		_mat.albedo_color.a = 0.55 * (1.0 - p)
-		if _t > 0.32:
+		var p := clampf(_t / DUR, 0.0, 1.0)
+		global_position = _origin + _dir * (p * wind_range)
+		# 残影落在主刃后方一段距离
+		_echo.position = Vector3(0.0, 0.0, -0.2 * p * wind_range)
+		_main_mat.albedo_color.a = 0.7 * (1.0 - p)
+		_echo_mat.albedo_color.a = 0.32 * (1.0 - p)
+		if _t > DUR + 0.04:
 			queue_free()

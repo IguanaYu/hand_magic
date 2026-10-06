@@ -15,6 +15,7 @@ const BOWSER_EARLY_ALIVE := 5   # 场上剩 ≤5 只时提前请出库巴
 const COIN_VALUE := 5
 const COMBO_WINDOW := 3.0
 const COMBO_MAX_MULT := 2.0
+const WIND_RANGE_M := 22.0  # 广场怪不近身（最近 14m），风刃射程须覆盖巡逻区
 
 var combo := 0
 var max_combo := 0
@@ -34,6 +35,7 @@ func _ready() -> void:
 	_setup_camera()
 	_build_sfx_pool()
 	_build_combat_ui()
+	spell_caster.wind_range = WIND_RANGE_M  # 风刃够得着广场（星际版保持 8m 贴身）
 	_build_overlay()
 	_load_best()
 	_show_banner("欢迎来到马里奥广场！")

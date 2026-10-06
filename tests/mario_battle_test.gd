@@ -53,11 +53,20 @@ func _run() -> void:
 	g3.global_position = Vector3(3.0, 0.0, -12.0)
 	g3.try_dodge_fire(Vector3(2.5, 0.0, -12.0))
 	_check("栗宝宝不闪避火球：无敌不触发", not g3._invulnerable and g3.mstate != MarioEnemy3D.MState.DODGE)
-	var g4: MarioEnemy3D = battlefield.spawn_enemy("goomba")
-	g4.global_position = Vector3(0.0, 0.0, -12.0)
+	g3.take_damage(999.0)  # 清出爆炸区，后续群杀测试单靶可判定
+
+	# --- AoE 群杀回归：两只同炸必须全死（曾因遍历中被移除而漏杀第二只） ---
+	var a1: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	a1.global_position = Vector3(-0.8, 0.0, -12.0)
+	a1.speed = 0.0  # 定住不动，测试确定性
+	var a2: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	a2.global_position = Vector3(0.8, 0.0, -12.0)
+	a2.speed = 0.0
 	battlefield.spell_caster.cast("fireball", battlefield.camera.unproject_position(Vector3(0.0, 0.5, -12.0)))
-	await get_tree().create_timer(1.4).timeout  # 飞行+起爆全链路
-	_check("火球投射物全链路：栗宝宝被炸死", not is_instance_valid(g4) or not g4.alive)
+	await get_tree().create_timer(1.6).timeout  # 飞行 ~20m + 起爆
+	_check("火球 AoE 群杀：两只同炸全死（曾漏杀）",
+		(not is_instance_valid(a1) or not a1.alive)
+		and (not is_instance_valid(a2) or not a2.alive))
 
 	# --- 慢慢龟：一段弃壳 → 静止壳 ---
 	var k: MarioEnemy3D = battlefield.spawn_enemy("koopa")
