@@ -421,15 +421,16 @@ class IceFieldFx:
 			queue_free()
 
 
-## 风刃：竖直新月形气浪刃（窄弧高墙 + 主刃/残影双层 + 轻微侧倾），
-## 沿施法方向高速切出并消隐。旧版先是头顶水平扇面（糊在天空）、
-## 后是宽弧墙（曲率不可见，读成"方块"）——窄新月最接近"一刀挥出去"的读形。
+## 风刃：竖直新月形气浪刃，沿施法方向高速切出并消隐。
+## 读形要点（从玩家背后看）：中央前凸、两尖向后掠（TIP_SWEEP）、
+## 轮廓两端收窄（taper）、端部渐隐（顶点色）——否则弦视角下读成"方块"。
 class WindBladeFx:
 	extends Node3D
-	const SPAN_DEG := 50.0    # 新月弧度：2.4m 半径上弦宽约 2m，曲率可辨
-	const H_MIN := 0.25
-	const H_MAX := 3.0
+	const SPAN_DEG := 56.0    # 新月弧度
+	const H_MIN := 0.3
+	const H_MAX := 3.1
 	const RADIUS := 2.4
+	const TIP_SWEEP := 1.1    # 两尖后掠距离（m）
 	const DUR := 0.28
 	var _t := 0.0
 	var _dir := Vector3.FORWARD
@@ -443,10 +444,10 @@ class WindBladeFx:
 		_dir = dir
 		_origin = Vector3(origin.x, 0.0, origin.z)
 		rotation.y = atan2(dir.x, dir.z)
-		_main_mat = _make_mat(0.7, 2.4)
-		_echo_mat = _make_mat(0.32, 1.4)
+		_main_mat = _make_mat(0.75, 2.4)
+		_echo_mat = _make_mat(0.34, 1.4)
 		add_child(_make_ribbon(_main_mat, RADIUS))
-		_echo = _make_ribbon(_echo_mat, RADIUS * 0.72)
+		_echo = _make_ribbon(_echo_mat, RADIUS * 0.7)
 		add_child(_echo)
 
 	func _make_mat(alpha: float, energy: float) -> StandardMaterial3D:
@@ -457,29 +458,51 @@ class WindBladeFx:
 		m.emission_enabled = true
 		m.emission = Color(0.7, 1.0, 0.8)
 		m.emission_energy_multiplier = energy
+		m.vertex_color_use_as_albedo = true  # 端部渐隐走顶点色
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED  # 双面：贴脸施法从内侧也可见
 		return m
+
+	## 新月轮廓采样：t∈[0,1]（0/1=两尖，0.5=中央）
+	func _moon_point(t: float, radius: float) -> Dictionary:
+		var a := deg_to_rad(SPAN_DEG) * (t - 0.5)
+		var tip := absf(t - 0.5) * 2.0  # 0 中央 → 1 尖端
+		var taper := sqrt(maxf(1.0 - tip * tip, 0.0))  # 轮廓收窄
+		var lateral := sin(a) * radius
+		var depth := cos(a) * radius - TIP_SWEEP * tip * tip  # 尖端后掠
+		return {
+			"bottom": Vector3(lateral, H_MIN + (1.0 - taper) * 0.9, depth),
+			"top": Vector3(lateral, H_MIN + (H_MAX - H_MIN) * maxf(taper, 0.1), depth),
+			"alpha": 0.35 + 0.65 * taper,
+		}
 
 	func _make_ribbon(mat: StandardMaterial3D, radius: float) -> MeshInstance3D:
 		var mesh := ImmediateMesh.new()
 		mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, mat)
-		var segments := 10
-		for i in range(segments):
-			var a0 := deg_to_rad(SPAN_DEG) * (float(i) / segments - 0.5)
-			var a1 := deg_to_rad(SPAN_DEG) * (float(i + 1) / segments - 0.5)
-			var p0 := Vector3(sin(a0), 0.0, cos(a0)) * radius
-			var p1 := Vector3(sin(a1), 0.0, cos(a1)) * radius
-			# 每段一个竖直 quad：底边贴地、顶边齐眉
-			mesh.surface_add_vertex(p0 + Vector3.UP * H_MIN)
-			mesh.surface_add_vertex(p0 + Vector3.UP * H_MAX)
-			mesh.surface_add_vertex(p1 + Vector3.UP * H_MAX)
-			mesh.surface_add_vertex(p0 + Vector3.UP * H_MIN)
-			mesh.surface_add_vertex(p1 + Vector3.UP * H_MAX)
-			mesh.surface_add_vertex(p1 + Vector3.UP * H_MIN)
+		var segments := 12
+		var prev: Dictionary = _moon_point(0.0, radius)
+		for i in range(1, segments + 1):
+			var cur: Dictionary = _moon_point(float(i) / segments, radius)
+			var pb: Vector3 = prev["bottom"]
+			var pt: Vector3 = prev["top"]
+			var cb: Vector3 = cur["bottom"]
+			var ct: Vector3 = cur["top"]
+			mesh.surface_set_color(Color(1, 1, 1, prev["alpha"]))
+			mesh.surface_add_vertex(pb)
+			mesh.surface_set_color(Color(1, 1, 1, cur["alpha"]))
+			mesh.surface_add_vertex(cb)
+			mesh.surface_set_color(Color(1, 1, 1, cur["alpha"]))
+			mesh.surface_add_vertex(ct)
+			mesh.surface_set_color(Color(1, 1, 1, prev["alpha"]))
+			mesh.surface_add_vertex(pb)
+			mesh.surface_set_color(Color(1, 1, 1, cur["alpha"]))
+			mesh.surface_add_vertex(ct)
+			mesh.surface_set_color(Color(1, 1, 1, prev["alpha"]))
+			mesh.surface_add_vertex(pt)
+			prev = cur
 		mesh.surface_end()
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
-		mi.rotation.z = randf_range(-0.15, 0.15)  # 轻微侧倾，像挥砍的弧
+		mi.rotation.z = randf_range(-0.14, 0.14)  # 轻微侧倾，像挥砍的弧
 		return mi
 
 	func _process(delta: float) -> void:
@@ -488,7 +511,7 @@ class WindBladeFx:
 		global_position = _origin + _dir * (p * wind_range)
 		# 残影落在主刃后方一段距离
 		_echo.position = Vector3(0.0, 0.0, -0.2 * p * wind_range)
-		_main_mat.albedo_color.a = 0.7 * (1.0 - p)
-		_echo_mat.albedo_color.a = 0.32 * (1.0 - p)
+		_main_mat.albedo_color.a = 0.75 * (1.0 - p)
+		_echo_mat.albedo_color.a = 0.34 * (1.0 - p)
 		if _t > DUR + 0.04:
 			queue_free()
