@@ -36,8 +36,9 @@ func _run() -> void:
 	e.speed = 50.0
 	await get_tree().create_timer(0.7).timeout
 	var d1: float = e.global_position.distance_to(battlefield.PLAYER_POS)
+	# 出生点随机（d0 波动数米），只断言相对推进量与未过头，不卡绝对距离
 	_check("前进：0.7s 直线推进（d0=%.1f d1=%.1f）" % [d0, d1],
-		d1 <= 11.5 and d0 - d1 > 8.0)
+		d0 - d1 > 8.0 and d1 > 5.0)
 
 	# --- 两段路径：先向集结点，再转向玩家（M1 调试版） ---
 	var e3: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
