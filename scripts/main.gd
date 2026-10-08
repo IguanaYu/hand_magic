@@ -264,7 +264,31 @@ func _wire_3d_signals() -> void:
 func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
 	trail.begin_fade()
 	var vp := _view_size()
-	battle3d.spell_caster.cast(spell_id, Vector2(anchor.x * vp.x, anchor.y * vp.y))
+	var sp := Vector2(anchor.x * vp.x, anchor.y * vp.y)
+	if spell_id == "wind_blade":
+		# 风刃朝"划线中点"的方向切出（而非收笔点）：画在哪边，风就切向哪边
+		var mid := _rune_midpoint(fsm._trajectory_public())
+		if mid.x >= 0.0:
+			sp = mid * vp
+	battle3d.spell_caster.cast(spell_id, sp)
+
+
+## 划线轨迹的路径中点（0~1 屏幕坐标）；轨迹太短返回 (-1,-1) 表示无效
+func _rune_midpoint(traj: Array) -> Vector2:
+	if traj.size() < 2:
+		return Vector2(-1.0, -1.0)
+	var total := 0.0
+	for i in range(traj.size() - 1):
+		total += (traj[i + 1] - traj[i]).length()
+	var half := total * 0.5
+	var acc := 0.0
+	for i in range(traj.size() - 1):
+		var seg: float = (traj[i + 1] - traj[i]).length()
+		if acc + seg >= half:
+			var t := (half - acc) / maxf(seg, 1e-6)
+			return traj[i].lerp(traj[i + 1], t)
+		acc += seg
+	return traj[traj.size() - 1]
 
 
 func _on_3d_quick_shot(_anchor: Vector2) -> void:
