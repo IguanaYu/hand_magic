@@ -271,6 +271,7 @@ func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
 		if mid.x >= 0.0:
 			sp = mid * vp
 	battle3d.spell_caster.cast(spell_id, sp)
+	battle3d.cast_banner.pop(GestureFSM.SPELL_NAME.get(spell_id, spell_id), CastBanner.color_of(spell_id))
 
 
 ## 划线轨迹的路径中点（0~1 屏幕坐标）；轨迹太短返回 (-1,-1) 表示无效
@@ -293,6 +294,7 @@ func _rune_midpoint(traj: Array) -> Vector2:
 
 func _on_3d_quick_shot(_anchor: Vector2) -> void:
 	battle3d.spell_caster.cast("quick_shot", Vector2.ZERO)
+	battle3d.cast_banner.pop("掌心火弹", CastBanner.color_of("quick_shot"))
 	hud.set_message("掌心火弹！")
 
 

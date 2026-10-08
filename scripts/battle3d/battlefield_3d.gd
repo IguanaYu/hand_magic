@@ -40,6 +40,7 @@ var fx_layer: Node3D
 var hud3d: BattleHud
 var crosshair: Crosshair
 var spell_bar: SpellBar
+var cast_banner: CastBanner
 var spell_caster: SpellCaster3D
 var shield: Shield3D
 
@@ -118,6 +119,8 @@ func _build_combat_ui() -> void:
 	ui_layer.add_child(crosshair)
 	spell_bar = SpellBar.new()
 	ui_layer.add_child(spell_bar)
+	cast_banner = CastBanner.new()
+	ui_layer.add_child(cast_banner)
 	spell_caster = SpellCaster3D.new()
 	spell_caster.battlefield = self
 	add_child(spell_caster)
@@ -264,6 +267,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and SPELL_KEYS.has(event.keycode):
 		spell_caster.cast(SPELL_KEYS[event.keycode], get_viewport().get_mouse_position())
 		spell_bar.flash(event.keycode)
+		cast_banner.pop(GestureFSM.SPELL_NAME.get(SPELL_KEYS[event.keycode], ""),
+			CastBanner.color_of(SPELL_KEYS[event.keycode]))
 
 
 func _update_camera(delta: float) -> void:

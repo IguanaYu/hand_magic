@@ -148,4 +148,10 @@ func _run() -> void:
 	await get_tree().create_timer(0.1).timeout  # 气浪墙扫到怪身上
 	await _shot("10_wind_blade")
 
+	# ===== 11 施法成功横幅：火球术大字弹出（元素配色+下划线） =====
+	_clear_field()
+	battlefield.cast_banner.pop("火球术", CastBanner.color_of("fireball"))
+	await get_tree().create_timer(0.32).timeout  # 回弹+下划线展开完成
+	await _shot("11_cast_banner")
+
 	get_tree().quit(0)
