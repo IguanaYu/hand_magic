@@ -180,6 +180,7 @@ func _ready() -> void:
 	_gui_test = "--gui-test" in args
 	# 默认 = 3D 战场（--mario 切马里奥换皮）；--ward = 旧守卫法阵（M0.5）；e2e/practice 走练习靶
 	mode3d = not practice_mode and "--ward" not in args
+	_open_pose_log()  # 临时诊断：正常游玩也记录姿势/状态时间线
 	if mode3d:
 		_build_3d("--mario" in args)
 		return
@@ -263,6 +264,7 @@ func _wire_3d_signals() -> void:
 
 func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
 	trail.begin_fade()
+	print("CAST #%d %s score=%.2f" % [fsm.cast_count, spell_id, _score])
 	var vp := _view_size()
 	var sp := Vector2(anchor.x * vp.x, anchor.y * vp.y)
 	if spell_id == "wind_blade":
@@ -293,6 +295,7 @@ func _rune_midpoint(traj: Array) -> Vector2:
 
 
 func _on_3d_quick_shot(_anchor: Vector2) -> void:
+	print("QUICKSHOT 法力=%.0f" % fsm.mana)
 	battle3d.spell_caster.cast("quick_shot", Vector2.ZERO)
 	battle3d.cast_banner.pop("掌心火弹", CastBanner.color_of("quick_shot"))
 	hud.set_message("掌心火弹！")
@@ -455,6 +458,13 @@ func _on_cast(spell_id: String, anchor: Vector2, score: float) -> void:
 
 func _on_fizzle(reason: String) -> void:
 	trail.begin_fade()
+	var bb := Rect2(Vector2.INF, Vector2.INF)
+	if fsm.last_trajectory.size() > 0:
+		bb = Rect2(fsm.last_trajectory[0], Vector2.ZERO)
+		for p in fsm.last_trajectory:
+			bb = bb.expand(p)
+	print("FIZZLE #%d %s | 轨迹点=%d 范围=%.2fx%.2f 法力=%.0f" % [
+		fsm.fizzle_count, reason, fsm.last_trajectory.size(), bb.size.x, bb.size.y, fsm.mana])
 	hud.set_message("法术失败：%s" % reason)
 
 
@@ -628,6 +638,7 @@ func _process_3d(delta: float) -> void:
 			_mouse_fallback_note = true
 			hud.set_message("未检测到摄像头——鼠标兜底：按住画符施法，右键护盾")
 	_update_hud(delta)
+	_log_pose(pose)
 
 
 func _update_hud(_delta: float) -> void:
@@ -652,6 +663,8 @@ func _update_hud(_delta: float) -> void:
 		"管线": "送 %d / 回 %d / 弃 %d" % [sent, recv, int(diag.get("frames_dropped", 0))],
 		"状态": fsm.state_name(),
 		"姿势": PoseClassifier.pose_name(pose_classifier.stable_pose()),
+		"原始姿势": PoseClassifier.pose_name(pose_classifier.last_raw_pose),
+		"指比值": _format_ratios(),
 		"延迟": "%.0f ms" % tracker.latency_ms,
 		"FPS": Engine.get_frames_per_second(),
 		"手": "%d" % _latest_hands.size(),
@@ -671,6 +684,17 @@ func _update_hud(_delta: float) -> void:
 		info["存活"] = "%.0f s" % mini_game.elapsed
 		info["场上敌人"] = "%d" % mini_game.alive_enemies()
 	hud.set_info(info)
+
+
+## 四指比值（食/中/无/小）格式化 + 滞回阈值提示，调参时对照 HUD 即可判断当前判定的位置
+func _format_ratios() -> String:
+	var r: Array = pose_classifier.last_ratios
+	if r.is_empty():
+		return "—"
+	var parts: Array = []
+	for v in r:
+		parts.append("%.2f" % float(v))
+	return "%s（拳<1.28/1.38 掌>1.62/1.52）" % "/".join(parts)
 
 
 func _take_3d_shot() -> void:
@@ -737,8 +761,7 @@ func _log_pose(pose: int) -> void:
 
 
 func _open_pose_log() -> void:
-	if "--e2e-test" in OS.get_cmdline_user_args():
-		_pose_log = FileAccess.open("res://tests/pose_log.txt", FileAccess.WRITE)
+	_pose_log = FileAccess.open("res://tests/pose_log.txt", FileAccess.WRITE)
 
 
 func _input(event: InputEvent) -> void:

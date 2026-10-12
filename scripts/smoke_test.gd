@@ -52,6 +52,36 @@ static func run() -> int:
 			fail_count += 1
 		print("%s pose: expect=%s got=%s" % ["[PASS]" if ok2 else "[FAIL]", expected_pose, got_name])
 
+	# 多数表决防抖：交替闪烁不切换（旧"全一致"方案会卡死，新方案两姿态各≤4票<5）
+	var pc2 := PoseClassifier.new()
+	for i in range(20):
+		pc2.classify(_make_fist() if i % 2 == 0 else _make_drawing())
+	var flicker_ok: bool = pc2.stable_pose() == PoseClassifier.Pose.NONE
+	if flicker_ok:
+		pass_count += 1
+	else:
+		fail_count += 1
+	print("%s debounce: 交替闪烁20帧稳定姿势不切换（got=%s）" % [
+		"[PASS]" if flicker_ok else "[FAIL]",
+		["NONE", "FIST", "PALM", "DRAWING"][pc2.stable_pose()]])
+
+	# 多数表决防抖：持续喂同一姿势攒够票数要能切换（拳→掌，顺带覆盖滞回退出路径）
+	var fist_turn: bool = false
+	for i in range(6):
+		if pc2.classify(_make_fist()) == PoseClassifier.Pose.FIST:
+			fist_turn = true
+	var palm_turn: bool = false
+	for i in range(6):
+		if pc2.classify(_make_palm()) == PoseClassifier.Pose.PALM:
+			palm_turn = true
+	var switch_ok: bool = fist_turn and palm_turn
+	if switch_ok:
+		pass_count += 1
+	else:
+		fail_count += 1
+	print("%s debounce: 持续喂拳→掌各6帧均切换（拳=%s 掌=%s）" % [
+		"[PASS]" if switch_ok else "[FAIL]", fist_turn, palm_turn])
+
 	# FSM 快速走查：聚气→画圆→施放
 	var fsm := GestureFSM.new()
 	# 注意：GDScript lambda 按值捕获局部变量，计数器必须用引用类型容器

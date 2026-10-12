@@ -27,7 +27,7 @@ var _cam_texture_rect: TextureRect
 var _viewport: SubViewport
 var _last_ts := 0
 var _frame_t0 := 0
-var _filters := {}  # hand_label -> {palm: OneEuroFilter, tip: OneEuroFilter}
+var _filters := {}  # hand_label -> Array[OneEuroFilter]（21 点逐点）
 var _mirror_warned := false
 
 
@@ -262,19 +262,27 @@ func diagnostics() -> Dictionary:
 
 func _make_hand(label: String, lm: Array[Vector2], now_ms: int) -> Dictionary:
 	if not _filters.has(label):
-		_filters[label] = {
-			"palm": OneEuroFilter.new(1.2, 0.05),
-			"tip": OneEuroFilter.new(1.5, 0.08),
-		}
-	var f: Dictionary = _filters[label]
-	# 掌心锚点 = 腕 + 三掌指关节均值（GDD §3.1 第③层）
-	var palm_raw: Vector2 = (lm[0] + lm[5] + lm[9] + lm[17]) / 4.0
+		var fs: Array = []
+		for i in range(21):
+			fs.append(OneEuroFilter.new(1.5, 0.08))
+		_filters[label] = fs
+	var fs: Array = _filters[label]
+	# 全 21 点逐点 One Euro 平滑：分类与渲染统一吃平滑数据
+	# （原始坐标的帧间抖动是姿势误判的主源，只滤 2 个点不够）
+	var pts: Array[Vector2] = []
+	for i in range(lm.size()):
+		if i < fs.size():
+			pts.append(fs[i].filter(lm[i], now_ms))
+		else:
+			pts.append(lm[i])
+	# 掌心锚点 = 腕 + 三掌指关节均值（GDD §3.1 第③层），同样取平滑后
 	return {
 		"label": label,
-		"points": lm,
-		"palm": f.palm.filter(palm_raw, now_ms),
-		"palm_raw": palm_raw,
-		"index_tip": f.tip.filter(lm[8], now_ms),
+		"points": pts,
+		"points_raw": lm,
+		"palm": (pts[0] + pts[5] + pts[9] + pts[17]) / 4.0,
+		"palm_raw": (lm[0] + lm[5] + lm[9] + lm[17]) / 4.0,
+		"index_tip": pts[8],
 	}
 
 

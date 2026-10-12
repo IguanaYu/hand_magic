@@ -42,7 +42,8 @@ func _process(delta: float) -> void:
 		4: _rune_phase("wind_blade", BLADE_ANCHOR, _slash_path(Vector2(0.35, 0.6), Vector2(0.65, 0.35), 20))
 		5: _rune_phase("garbage", Vector2(0.5, 0.5), _circle_path(Vector2(0.5, 0.55), 0.012, 30))
 		6: _cancel_phase()
-		7: _timeout_phase()
+		7: _stop_release_phase()
+		8: _fist_release_phase()
 		_:
 			_finish()
 
@@ -61,7 +62,7 @@ func _advance() -> void:
 
 
 # ---------- 通用法术相位 ----------
-# S0 拳→聚气  S1 静指→画符  S2 走轨迹  S3 张掌→冷却  S4(风刃)等弹道
+# S0 拳→聚气  S1 静指→待命  S2 走轨迹（动起即起笔画符）  S3 张掌→冷却  S4(风刃)等弹道
 
 func _rune_phase(rune_id: String, anchor: Vector2, pts: Array) -> void:
 	if stage == 0:
@@ -77,17 +78,18 @@ func _rune_phase(rune_id: String, anchor: Vector2, pts: Array) -> void:
 				_next_stage()
 		1:
 			_feed(_make_drawing_at(pts[0]))
-			if main.fsm.state == GestureFSM.State.DRAWING:
-				_check("%s: 伸指进入画符" % rune_id, true)
+			if main.fsm.state == GestureFSM.State.CHARGE:
+				_check("%s: 伸指进入待命" % rune_id, true)
 				_next_stage()
 			elif stage_t > 2.0:
-				_check("%s: 伸指进入画符" % rune_id, false)
+				_check("%s: 伸指进入待命" % rune_id, false)
 				_next_stage()
 		2:
 			var idx: int = mini(stage_i, pts.size() - 1)
 			_feed(_make_drawing_at(pts[idx]))
 			stage_i += 1
 			if stage_i >= pts.size():
+				_check("%s: 指尖动起进入画符" % rune_id, main.fsm.state == GestureFSM.State.DRAWING)
 				_check("%s: 拖尾随轨迹更新" % rune_id, main.trail.points.size() >= 8)
 				broken_before = 4 - _alive_count()
 				fizzles_before = main.fsm.fizzle_count
@@ -191,29 +193,55 @@ func _cancel_phase() -> void:
 				_advance()
 
 
-func _timeout_phase() -> void:
-	var pts := _circle_path(Vector2(0.5, 0.40), 0.10, 60)
+func _stop_release_phase() -> void:
+	# 新交互验证：画符中指尖停住（减速）自动收笔施放，不依赖张掌
+	var pts := _circle_path(Vector2(0.5, 0.40), 0.10, 40)
 	match stage:
 		0:
 			_feed(_make_fist_at(Vector2(0.5, 0.5)))
 			if main.fsm.state == GestureFSM.State.CHARGE:
-				fizzles_before = main.fsm.fizzle_count
+				main.fsm.mana = GestureFSM.MANA_MAX  # 前面相位已耗蓝，这里只验证停笔收笔
+				casts_before = main.fsm.cast_count
 				_next_stage()
 			elif stage_t > 3.0:
 				_next_stage()
 		1:
-			_feed(_make_drawing_at(pts[0]))
-			if main.fsm.state == GestureFSM.State.DRAWING:
-				_next_stage()
-			elif stage_t > 2.0:
+			var idx: int = mini(stage_i, pts.size() - 1)
+			_feed(_make_drawing_at(pts[idx]))
+			stage_i += 1
+			if stage_i >= pts.size():
 				_next_stage()
 		2:
-			var t := stage_t
-			var p := Vector2(0.5 + 0.015 * cos(t * 2.0), 0.40 + 0.015 * sin(t * 2.0))
-			_feed(_make_drawing_at(p))
-			if main.fsm.fizzle_count > fizzles_before or stage_t > 4.0:
-				_check("超时: 2.5s自动FIZZLE", main.fsm.fizzle_count > fizzles_before)
-				_check("超时: 失败不施放", main.fsm.cast_count == casts_before)
+			# 喂最后一个点保持不动：测速窗排空 → 速度归零 → 停笔收笔
+			_feed(_make_drawing_at(pts[pts.size() - 1]))
+			if main.fsm.state == GestureFSM.State.COOLDOWN or stage_t > 2.0:
+				_check("停笔: 指尖停住自动收笔施放", main.fsm.cast_count == casts_before + 1)
+				_advance()
+
+
+func _fist_release_phase() -> void:
+	# 收笔主路径验证：画符中握拳 = 确认收笔施放（旧语义是"画符中断"失败，已废弃）
+	var pts := _circle_path(Vector2(0.5, 0.40), 0.10, 40)
+	match stage:
+		0:
+			_feed(_make_fist_at(Vector2(0.5, 0.5)))
+			if main.fsm.state == GestureFSM.State.CHARGE:
+				main.fsm.mana = GestureFSM.MANA_MAX
+				casts_before = main.fsm.cast_count
+				_next_stage()
+			elif stage_t > 3.0:
+				_next_stage()
+		1:
+			var idx: int = mini(stage_i, pts.size() - 1)
+			_feed(_make_drawing_at(pts[idx]))
+			stage_i += 1
+			if stage_i >= pts.size():
+				_next_stage()
+		2:
+			# 画完握拳：多数表决确认（~5帧）→ 保持 0.12s → 收笔施放
+			_feed(_make_fist_at(pts[pts.size() - 1]))
+			if main.fsm.state == GestureFSM.State.COOLDOWN or stage_t > 2.0:
+				_check("握拳收笔: 画符中握拳确认施放", main.fsm.cast_count == casts_before + 1)
 				_advance()
 
 
