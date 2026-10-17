@@ -29,6 +29,9 @@ var _last_ts := 0
 var _frame_t0 := 0
 var _filters := {}  # hand_label -> Array[OneEuroFilter]（21 点逐点）
 var _mirror_warned := false
+var _last_frame_ms := 0     # 最近一次摄像头帧事件时刻（停帧看门狗用）
+var _stall_warned := false
+var _stall_retried := false
 
 
 func setup(viewport: SubViewport, texture_rect: TextureRect) -> void:
@@ -111,6 +114,24 @@ func _process(delta: float) -> void:
 		if _poll_t > 0.5:
 			_poll_t = 0.0
 			_try_use_first_feed()
+		return
+	# 看门狗①：在途结果回调丢失自愈——MediaPipe 偶发不给回调会让在途节流
+	# 永久卡死（frames_sent-results_received 恒为 1，之后所有帧被丢弃，
+	# 表现为手消失/无法施法）。超时视作丢失，恢复送帧；迟到的回调多计一次无害。
+	var now := Time.get_ticks_msec()
+	if frames_sent > results_received and _frame_t0 > 0 and now - _frame_t0 > 3000:
+		tracker_message.emit("识别回调丢失，已自动恢复追踪")
+		results_received = frames_sent
+		_frame_t0 = now
+	# 看门狗②：摄像头停帧——先提示；8 秒仍无帧则重激活 feed 一次（Media Foundation 偶发）
+	if _feed.feed_is_active and frames_sent > 0 and _last_frame_ms > 0 and now - _last_frame_ms > 3000:
+		if not _stall_warned:
+			_stall_warned = true
+			tracker_message.emit("摄像头停止出帧，尝试恢复…")
+		if now - _last_frame_ms > 8000 and not _stall_retried:
+			_stall_retried = true
+			_feed.feed_is_active = false
+			_feed.feed_is_active = true
 
 
 func _on_feed_added(_id: int) -> void:
@@ -185,6 +206,7 @@ func _fit_viewport(tex: CameraTexture) -> void:
 
 
 func _on_frame_changed() -> void:
+	_last_frame_ms = Time.get_ticks_msec()  # 帧事件时间戳（停帧看门狗基准）
 	if _viewport == null or _task == null:
 		return
 	# 在途节流：最多 1 帧推理在跑（快机上无感，Pi 4 上把排队延迟钉在单次推理时长内）
