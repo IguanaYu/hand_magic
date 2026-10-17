@@ -81,6 +81,22 @@ static func run() -> int:
 	print("%s pinch-hyst: 捏合进入/半开维持/拉开退出（enter=%s hold=%s exit=%s）" % [
 		"[PASS]" if hyst_ok else "[FAIL]", enter_ok, hold_ok, POSE_NAMES[exit_got]])
 
+	# 捏合快速退出：松开后 3 票即离开捏合（5 票全一致在手运动时凑不齐 → 卡'捏合'24s 真机事故）
+	var pc6 := PoseClassifier.new()  # 默认 confirm_frames=5
+	for i in range(6):
+		pc6.classify(_make_pinch())
+	var pinch_entered: bool = pc6.stable_pose() == PoseClassifier.Pose.PINCH
+	for i in range(3):
+		pc6.classify(_make_palm())
+	var pinch_left: bool = pc6.stable_pose() != PoseClassifier.Pose.PINCH
+	var fastexit_ok: bool = pinch_entered and pinch_left
+	if fastexit_ok:
+		pass_count += 1
+	else:
+		fail_count += 1
+	print("%s pinch-fastexit: 进入5票/离开3票（entered=%s left=%s）" % [
+		"[PASS]" if fastexit_ok else "[FAIL]", pinch_entered, pinch_left])
+
 	# 多数表决防抖：交替闪烁不切换（旧"全一致"方案会卡死，新方案两姿态各≤4票<5）
 	var pc2 := PoseClassifier.new()
 	for i in range(20):
@@ -333,6 +349,27 @@ static func _test_fsm() -> Array:
 	else:
 		f += 1
 	print("%s fsm.timeout: 捏着不动超2.5s超时收笔" % ["[PASS]" if timeout_ok else "[FAIL]"])
+
+	# --- latch 自愈：识别卡死在'捏合'时，封锁 PINCH_LATCH_S 后自动解除（真机事故回归锚）---
+	var counters5 := {"fizzles": 0}
+	var fsm5 := GestureFSM.new()
+	fsm5.fizzle.connect(func(_r): counters5.fizzles += 1)
+	for i in range(3):  # 短捏（3 点 < 8）→ fizzle → latch 置位
+		fsm5.update(PoseClassifier.Pose.PINCH, true, Vector2(0.4 + i * 0.01, 0.5), anchor, dt)
+	fsm5.update(PoseClassifier.Pose.PALM, true, Vector2(0.43, 0.5), anchor, dt)
+	var fizzle_set: bool = counters5.fizzles == 1 and fsm5.latch_active()
+	for i in range(30):  # 1.0s < 2.0s：仍在封锁（含 0.3s 冷却 + IDLE 阻挡）
+		fsm5.update(PoseClassifier.Pose.PINCH, true, Vector2(0.44, 0.5), anchor, dt)
+	var still_blocked: bool = fsm5.state == GestureFSM.State.IDLE
+	for i in range(45):  # 再 1.5s（累计 2.5s > 2.0s）：自愈解锁，捏合可再进画符
+		fsm5.update(PoseClassifier.Pose.PINCH, true, Vector2(0.44, 0.5), anchor, dt)
+	var expiry_ok: bool = fizzle_set and still_blocked and fsm5.state == GestureFSM.State.DRAWING
+	if expiry_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.latch_expiry: 封锁1s内有效=%s，2s后自愈=%s" % [
+		"[PASS]" if expiry_ok else "[FAIL]", still_blocked, fsm5.state == GestureFSM.State.DRAWING])
 
 	# --- 快弹保留：拳→张掌 = 掌心火弹（CHARGE 仅剩的路径）---
 	var counters4 := {"quick": 0}

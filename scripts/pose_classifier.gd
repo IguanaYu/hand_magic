@@ -25,6 +25,10 @@ const PINCH_RATIO := 0.35       # 进入捏合：拇指尖-食指尖距离/掌�
 const PINCH_EXIT_RATIO := 0.60  # 退出捏合（滞回：进入严、维持松）
 const PINCH_INDEX_MIN := 1.15   # 防握拳误判：捏合时食指尖伸出去够拇指（比值高），
                                 # 握拳时指尖收进掌心（比值≈0.7~1.05），低于此不算捏合
+const PINCH_EXIT_VOTES := 3     # 离开捏合所需票数（进入仍需 confirm_frames）。
+                                # 捏合是瞬态"点击"姿势：松开时手在运动，原始姿势在
+                                # 张掌/画符/无 间闪烁，5 票全一致凑不齐 → 稳定姿势
+                                # 冻结在'捏合'（真机事故：卡死 24s + latch 静默封锁）
 
 ## 去抖票数：窗口 = confirm_frames + 2 帧内同一姿势攒够 confirm_frames 票才切换。
 ## 设为 1 表示完全去掉抖动（单测用）。
@@ -101,7 +105,12 @@ func _debounce(raw_pose: int) -> int:
 	for p in _history:
 		if p == raw_pose:
 			votes += 1
-	if votes >= confirm_frames and raw_pose != _stable_pose:
+	# 切换所需票数：一般姿势进出都要 confirm_frames 票；唯独离开捏合降为
+	# PINCH_EXIT_VOTES——捏合是瞬态姿势，松开必须能快速被识别（防稳定姿势卡'捏合'）
+	var need := confirm_frames
+	if _stable_pose == Pose.PINCH and raw_pose != Pose.PINCH:
+		need = PINCH_EXIT_VOTES
+	if votes >= need and raw_pose != _stable_pose:
 		_stable_pose = raw_pose
 	return _stable_pose
 

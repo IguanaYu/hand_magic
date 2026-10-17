@@ -10,7 +10,9 @@ extends Node
 ## ——旧的握拳收笔肌肉记忆仍然可用。
 ## 起笔预滚：捏合检测有去抖滞后（5/7 帧表决），玩家捏上的瞬间手就开始动，
 ## IDLE/CHARGE 期间滚动缓存最近 PREROLL_MS 的食指尖，起笔时先播种进轨迹防切头。
-## latch：施放/失败后仍捏着不松不自动重画，松开一次后恢复（起笔只认上升沿）。
+## latch：施放/失败后仍捏着不松不自动重画，松开一次后恢复（起笔只认上升沿）；
+## 带 PINCH_LATCH_S 自愈过期——识别若卡死在'捏合'（真机事故：稳定姿势冻结 24s），
+## 封锁最多持续 2s，之后恢复可见行为（轨迹/超时施放）而非永久静默。
 ## 任意状态：张掌保持 500ms → IDLE；丢手 0.6s → IDLE。
 
 
@@ -48,6 +50,8 @@ const QUICK_COOLDOWN := 0.5
 const DRAW_TIMEOUT := 2.5
 const PINCH_RELEASE_CONFIRM_S := 0.12  # 画符中松开捏合持续此时长 = 确认收笔施放
 const PREROLL_MS := 200                # 起笔预滚缓冲：补偿姿势去抖（5/7 帧表决）的检测滞后
+const PINCH_LATCH_S := 2.0             # latch 自愈过期：覆盖冷却 0.8s 后仍不误触发，且识别
+                                       # 卡死在'捏合'时封锁最多 2s（静默不可接受）
 const SAMPLE_MIN_DIST := 0.004         # 采样最小间距：滤静止堆点
 const SAMPLE_TELEPORT := 0.12          # 单帧跳变超过此值必为姿势切换伪影，丢弃
 const CAST_THRESHOLD := 0.80
@@ -76,6 +80,7 @@ var _preroll: Array = []      # 起笔预滚环 [t_ms, Vector2]（非 DRAWING �
 var _open_ms := 0.0           # 画符中非捏合（松开）持续时长
 var _draw_time := 0.0         # 本次画符累计时长（超时用；累积 delta 而非墙钟，测试可快进）
 var _pinch_latch := false     # 施放后仍捏着不松 → 不自动重画
+var _latch_t := 0.0           # latch 已持续时长（自愈过期用）
 
 
 func reset() -> void:
@@ -89,6 +94,7 @@ func reset() -> void:
 	_open_ms = 0.0
 	_draw_time = 0.0
 	_pinch_latch = false
+	_latch_t = 0.0
 	state_changed.emit("IDLE")
 
 
@@ -105,9 +111,17 @@ func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, 
 		# 预滚：非画符状态滚动缓存食指尖，起笔播种用（画符中不需要）
 		if state != State.DRAWING:
 			_push_preroll(index_tip)
-	# latch 只在观察到"确实松开了"后解除，施放后捏着不放不会自动重画
+	# latch 只在观察到"确实松开了"后解除，施放后捏着不放不会自动重画；
+	# 自愈过期兜底：识别若冻结在'捏合'，封锁最多 PINCH_LATCH_S 后自动解除
 	if pose != PoseClassifier.Pose.PINCH:
 		_pinch_latch = false
+	if _pinch_latch:
+		_latch_t += delta
+		if _latch_t >= PINCH_LATCH_S:
+			_pinch_latch = false
+			_latch_t = 0.0
+	else:
+		_latch_t = 0.0
 
 	# 法力回复（GDD §4.4：聚气状态 8/s，其余 2/s）
 	var regen := MANA_REGEN_IDLE if state != State.CHARGE else MANA_REGEN_CHARGE
@@ -314,3 +328,8 @@ func state_name() -> String:
 		State.DRAWING: return "画符"
 		State.COOLDOWN: return "冷却"
 		_: return "待机"
+
+
+## latch 是否仍在封锁起笔（HUD 提示"先松开捏合"用）
+func latch_active() -> bool:
+	return _pinch_latch

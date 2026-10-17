@@ -573,7 +573,7 @@ func _process(delta: float) -> void:
 			hud.set_message("未检测到摄像头——鼠标兜底：点按=掌心火弹，按住画圈=火球")
 
 	_update_hud(delta)
-	_log_pose(pose)
+	_log_pose(pose, delta)
 	if _gui_test:
 		_gui_dump_t += delta
 		if _gui_dump_t >= 0.5:
@@ -640,6 +640,15 @@ func _process_3d(delta: float) -> void:
 	fsm.update(pose, hand_present, index_tip, anchor, delta)
 	if MANA_FREE:
 		fsm.mana = GestureFSM.MANA_MAX  # 调试期法力免费
+	# latch 封锁期的可见反馈：施放后捏着不放/识别卡'捏合'时提示怎么解锁
+	#（真机事故：识别冻结在'捏合'+latch 曾完全静默封锁画符）
+	var latch_blocked: bool = fsm.state == GestureFSM.State.IDLE \
+		and pose == PoseClassifier.Pose.PINCH and fsm.latch_active()
+	if latch_blocked and not _latch_hinted:
+		_latch_hinted = true
+		hud.set_message("先松开拇指食指，再重新捏合画符")
+	if not latch_blocked:
+		_latch_hinted = false
 	skeleton.set_hands(_latest_hands)
 	skeleton.state_color = _state_color()
 
@@ -674,7 +683,8 @@ func _process_3d(delta: float) -> void:
 			_mouse_fallback_note = true
 			hud.set_message("未检测到摄像头——鼠标兜底：按住画符施法，右键护盾")
 	_update_hud(delta)
-	_log_pose(pose)
+	_log_pose(pose, delta)
+
 
 
 func _update_hud(_delta: float) -> void:
@@ -785,16 +795,32 @@ func _finish_camera_test() -> void:
 	get_tree().quit(0 if ok else 2)
 
 
-func _log_pose(pose: int) -> void:
+var _raw_diverge_t := 0.0   # 原始/稳定姿势持续背离计时（去抖卡死前兆告警）
+var _latch_hinted := false  # latch 封锁提示已显示（避免每帧刷屏）
+
+
+func _log_pose(pose: int, delta: float) -> void:
 	if _pose_log == null:
 		return
 	var state := fsm.state_name()
+	# 原始姿势与稳定姿势持续背离 = 去抖卡死前兆（真机事故：稳定姿势冻结'捏合'24s，
+	# latch 静默封锁画符）——背离超 2s 打一条限流告警（每 2s 至多一条）
+	if _latest_hands.size() > 0 and pose != PoseClassifier.Pose.NONE and pose_classifier.last_raw_pose != pose:
+		_raw_diverge_t += delta
+		if _raw_diverge_t >= 2.0:
+			_raw_diverge_t = 0.0
+			_pose_log.store_string("%.3f WARN 去抖背离 稳定=%s 原始=%s 捏距=%.2f 状态=%s\n" % [
+				Time.get_ticks_msec() / 1000.0, PoseClassifier.pose_name(pose),
+				PoseClassifier.pose_name(pose_classifier.last_raw_pose),
+				pose_classifier.last_pinch_dist, state])
+	else:
+		_raw_diverge_t = 0.0
 	if pose != _last_logged_pose or state != _last_logged_state:
 		_last_logged_pose = pose
 		_last_logged_state = state
 		_pose_log.store_string("%.3f pose=%s state=%s hands=%d\n" % [
 			Time.get_ticks_msec() / 1000.0, PoseClassifier.pose_name(pose), state, _latest_hands.size()])
-		_pose_log.flush()
+	_pose_log.flush()
 
 
 func _open_pose_log() -> void:
