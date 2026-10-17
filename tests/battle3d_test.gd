@@ -81,8 +81,8 @@ func _run() -> void:
 	var hp0: float = battlefield.player_hp
 	battlefield.spawn_bullet(Vector3(0.0, 1.65, 2.0), battlefield.PLAYER_POS, 10.0, 20.0, false)
 	await get_tree().create_timer(0.5).timeout
-	_check("子弹命中：玩家扣血 10（%.0f→%.0f）" % [hp0, battlefield.player_hp],
-		is_equal_approx(battlefield.player_hp, hp0 - 10.0))
+	_check("子弹命中：玩家扣血 %.1f（%.0f→%.0f）" % [10.0 * Battlefield3D.PLAYER_DMG_SCALE, hp0, battlefield.player_hp],
+		is_equal_approx(battlefield.player_hp, hp0 - 10.0 * Battlefield3D.PLAYER_DMG_SCALE))
 
 	# --- 敌人开火产生曳光弹 ---
 	var fm: EnemyUnit3D = battlefield.spawn_enemy("marine", false)

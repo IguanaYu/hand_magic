@@ -16,6 +16,8 @@ const PATH_ENV := "res://assets3d/env/%s.glb"
 
 const SPAWN_INTERVAL := 2.5
 const MAX_ALIVE := 20
+## 难度系数：敌人对玩家的最终伤害 = 原伤害 × 该值（调低=更容易存活）
+const PLAYER_DMG_SCALE := 0.15
 const FIRST_WAVE_DELAY := 3.0
 const WAVE_CLEAR_BONUS := 50
 ## 地面小队规模区间（同队同侧同集结点，成纵队进场）
@@ -343,7 +345,7 @@ func restart() -> void:
 func player_hit(dmg: float) -> void:
 	if is_over:
 		return
-	player_hp = maxf(0.0, player_hp - dmg)
+	player_hp = maxf(0.0, player_hp - dmg * PLAYER_DMG_SCALE)
 	_flash.color.a = 0.35
 	var tw := create_tween()
 	tw.tween_property(_flash, "color:a", 0.0, 0.35)
