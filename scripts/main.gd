@@ -316,33 +316,11 @@ func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
 	if record_panel != null and record_panel.is_open():
 		return  # 录制模式：这笔归录制面板存样本，不触发战场施法/横幅
 	print("CAST #%d %s score=%.2f" % [fsm.cast_count, spell_id, _score])
+	# anchor = 画符轨迹的包围盒中心（FSM 算好）：画的图在哪，法术从哪出
 	var vp := _view_size()
 	var sp := Vector2(anchor.x * vp.x, anchor.y * vp.y)
-	if spell_id == "wind_blade":
-		# 风刃朝"划线中点"的方向切出（而非收笔点）：画在哪边，风就切向哪边
-		var mid := _rune_midpoint(fsm._trajectory_public())
-		if mid.x >= 0.0:
-			sp = mid * vp
 	battle3d.spell_caster.cast(spell_id, sp)
 	battle3d.cast_banner.pop(GestureFSM.SPELL_NAME.get(spell_id, spell_id), CastBanner.color_of(spell_id))
-
-
-## 划线轨迹的路径中点（0~1 屏幕坐标）；轨迹太短返回 (-1,-1) 表示无效
-func _rune_midpoint(traj: Array) -> Vector2:
-	if traj.size() < 2:
-		return Vector2(-1.0, -1.0)
-	var total := 0.0
-	for i in range(traj.size() - 1):
-		total += (traj[i + 1] - traj[i]).length()
-	var half := total * 0.5
-	var acc := 0.0
-	for i in range(traj.size() - 1):
-		var seg: float = (traj[i + 1] - traj[i]).length()
-		if acc + seg >= half:
-			var t := (half - acc) / maxf(seg, 1e-6)
-			return traj[i].lerp(traj[i + 1], t)
-		acc += seg
-	return traj[traj.size() - 1]
 
 
 func _on_3d_quick_shot(_anchor: Vector2) -> void:

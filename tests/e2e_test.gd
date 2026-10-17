@@ -35,11 +35,12 @@ func _process(delta: float) -> void:
 		return
 	stage_t += delta
 	match phase:
-		0: _rune_phase("fireball", FIRE_ANCHOR, _circle_path(Vector2(0.5, 0.40), 0.12, 40))
-		1: _rune_phase("lightning", BOLT_ANCHOR, _zigzag_path(Vector2(0.3, 0.3), Vector2(0.7, 0.55), 45))
+		# 符文直接画在靶心：施放锚点=轨迹包围盒中心，图形中心即落点
+		0: _rune_phase("fireball", FIRE_ANCHOR, _circle_path(FIRE_ANCHOR, 0.12, 40))
+		1: _rune_phase("lightning", BOLT_ANCHOR, _zigzag_path(Vector2(0.3, 0.375), Vector2(0.7, 0.625), 45))
 		2: _respawn_phase()
-		3: _rune_phase("ice_field", ICE_ANCHOR, _triangle_path(Vector2(0.5, 0.30), 0.28, 42))
-		4: _rune_phase("wind_blade", BLADE_ANCHOR, _slash_path(Vector2(0.35, 0.6), Vector2(0.65, 0.35), 20))
+		3: _rune_phase("ice_field", ICE_ANCHOR, _triangle_path(ICE_ANCHOR + Vector2(0.0, -0.14), 0.28, 42))
+		4: _rune_phase("wind_blade", BLADE_ANCHOR, _slash_path(BLADE_ANCHOR + Vector2(-0.15, 0.125), BLADE_ANCHOR + Vector2(0.15, -0.125), 20))
 		5: _rune_phase("garbage", Vector2(0.5, 0.5), _circle_path(Vector2(0.5, 0.55), 0.012, 30))
 		6: _cancel_phase()
 		7: _stop_release_phase()

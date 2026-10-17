@@ -65,7 +65,7 @@ var last_trajectory: Array = []  # 最近一次 release/fizzle 的轨迹快照�
 var cast_trajectory: Array = []  # 最近一次成功施放的轨迹快照（调试/测试用）
 var cast_count := 0
 var fizzle_count := 0
-var current_anchor := Vector2(0.5, 0.5)  # 掌心锚点，施放位置（GDD §3.1 第③层）
+var current_anchor := Vector2(0.5, 0.5)  # 掌心锚点：掌心火弹出手位置；画符施放改用 _rune_center()
 
 var _palm_hold_ms := 0
 var _no_hand_ms := 0.0
@@ -249,6 +249,19 @@ func _window_disp() -> float:
 	return float((_samples[_samples.size() - 1][1] - _samples[0][1]).length())
 
 
+## 画符轨迹的包围盒中心（0~1 归一化）：弹道从"画的图形"中心出，
+## 而不是手的位置——画在哪，法术落在哪。轨迹异常时回退掌心锚点。
+func _rune_center() -> Vector2:
+	if trajectory.is_empty():
+		return current_anchor
+	var min_v := Vector2(INF, INF)
+	var max_v := Vector2(-INF, -INF)
+	for p in trajectory:
+		min_v = min_v.min(p)
+		max_v = max_v.max(p)
+	return (min_v + max_v) * 0.5
+
+
 func _release() -> void:
 	if trajectory.size() < 8:
 		_fizzle("符文不完整")
@@ -276,7 +289,7 @@ func _release() -> void:
 	cast_count += 1
 	last_trajectory = trajectory.duplicate()
 	cast_trajectory = trajectory.duplicate()
-	cast_performed.emit(spell_id, current_anchor, last_result.score)
+	cast_performed.emit(spell_id, _rune_center(), last_result.score)
 	state = State.COOLDOWN
 	_cooldown_left = COOLDOWN_TIME
 	trajectory.clear()
