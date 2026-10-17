@@ -25,6 +25,8 @@ var spawner: EnemySpawner
 var mini_game: MiniGame
 var battle3d: Battlefield3D
 var codex: CodexPanel
+var rune_store: RuneSamples
+var record_panel: RuneRecordPanel
 var mode3d := false
 
 var _cam_container: SubViewportContainer
@@ -216,8 +218,8 @@ func _build_3d(mario := false) -> void:
 	battle3d.ui_layer.add_child(skeleton)
 	hud = DebugHud.new()
 	battle3d.ui_layer.add_child(hud)
-	hud.set_hint("H 手势图鉴 ｜ F1 调试 ｜ F2 摄像头预览 ｜ R 重开")
-	hud.set_message("按 H 查看每个法术怎么画")
+	hud.set_hint("H 手势图鉴 ｜ G 录制符文 ｜ F1 调试 ｜ F2 摄像头预览 ｜ R 重开")
+	hud.set_message("按 H 查看每个法术怎么画，按 G 录你自己的画法")
 	# 摄像头预览小窗（F2 切换）：直接看追踪用的画面——手在不在镜头里一目了然
 	_cam_pip_panel = Panel.new()
 	_cam_pip_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -245,7 +247,54 @@ func _build_3d(mario := false) -> void:
 	codex = CodexPanel.new()
 	codex.fsm = fsm
 	battle3d.add_child(codex)
+	# 符文录制：读档样本注入识别器（附加模板，不录也能玩）+ 面板 + HUD 按钮
+	rune_store = RuneSamples.new()
+	_load_user_rune_samples()
+	record_panel = RuneRecordPanel.new()
+	record_panel.fsm = fsm
+	record_panel.store = rune_store
+	record_panel.main_node = self
+	record_panel.battle = battle3d
+	record_panel.trail = trail
+	battle3d.add_child(record_panel)
+	fsm.cast_performed.connect(record_panel._on_cast)
+	fsm.fizzle.connect(record_panel._on_fizzle)
+	codex.open_guard = func(): return record_panel.is_open()
+	record_panel.open_guard = func(): return codex.is_open()
+	_add_record_button()
 	_wire_3d_signals()
+
+
+## 玩家上一次会话录的样本灌进识别器；读档失败静默降级（无样本=内置模板照常）
+func _load_user_rune_samples() -> void:
+	if not rune_store.load():
+		return
+	for spell_id in rune_store.samples:
+		var rune_name := RuneSamples.rune_of(spell_id)
+		if rune_name.is_empty():
+			continue
+		for stroke in rune_store.samples[spell_id]:
+			fsm.recognizer.add_recorded_template(rune_name, stroke)
+
+
+func _add_record_button() -> void:
+	var btn := Button.new()
+	btn.text = "手势录制 (G)"
+	btn.tooltip_text = "录制你自己的画符样本，识别更懂你的手（不录也能玩）"
+	btn.add_theme_font_size_override("font_size", 14)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.10, 0.18, 0.85)
+	sb.border_color = Color(0.35, 0.55, 0.85, 0.7)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(5)
+	sb.set_content_margin_all(6)
+	btn.add_theme_stylebox_override("normal", sb)
+	var sb_h := sb.duplicate()
+	sb_h.bg_color = Color(0.14, 0.19, 0.32, 0.9)
+	btn.add_theme_stylebox_override("hover", sb_h)
+	btn.position = Vector2(12, 8)
+	btn.pressed.connect(func(): record_panel.toggle())
+	battle3d.ui_layer.add_child(btn)
 
 
 func _wire_3d_signals() -> void:
@@ -264,6 +313,8 @@ func _wire_3d_signals() -> void:
 
 func _on_3d_cast(spell_id: String, anchor: Vector2, _score: float) -> void:
 	trail.begin_fade()
+	if record_panel != null and record_panel.is_open():
+		return  # 录制模式：这笔归录制面板存样本，不触发战场施法/横幅
 	print("CAST #%d %s score=%.2f" % [fsm.cast_count, spell_id, _score])
 	var vp := _view_size()
 	var sp := Vector2(anchor.x * vp.x, anchor.y * vp.y)
@@ -295,6 +346,8 @@ func _rune_midpoint(traj: Array) -> Vector2:
 
 
 func _on_3d_quick_shot(_anchor: Vector2) -> void:
+	if record_panel != null and record_panel.is_open():
+		return  # 录制模式不出掌心火弹
 	print("QUICKSHOT 法力=%.0f" % fsm.mana)
 	battle3d.spell_caster.cast("quick_shot", Vector2.ZERO)
 	battle3d.cast_banner.pop("掌心火弹", CastBanner.color_of("quick_shot"))
@@ -458,6 +511,8 @@ func _on_cast(spell_id: String, anchor: Vector2, score: float) -> void:
 
 func _on_fizzle(reason: String) -> void:
 	trail.begin_fade()
+	if record_panel != null and record_panel.is_open():
+		return  # 录制模式的失败反馈由录制面板显示
 	var bb := Rect2(Vector2.INF, Vector2.INF)
 	if fsm.last_trajectory.size() > 0:
 		bb = Rect2(fsm.last_trajectory[0], Vector2.ZERO)
@@ -578,6 +633,8 @@ func _process_3d(delta: float) -> void:
 		# 鼠标兜底：左键=聚气/画符，右键=护盾
 		var down := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 		var m := get_viewport().get_mouse_position() / vp
+		if record_panel != null and record_panel.is_pointer_over_ui():
+			down = false  # 悬停在录制面板按钮上：点击不当成画符
 		if down and not _mouse_was_down:
 			_mouse_down_pos = m
 		_mouse_was_down = down
@@ -609,8 +666,9 @@ func _process_3d(delta: float) -> void:
 	skeleton.state_color = _state_color()
 
 	# 护盾：空闲持续张掌 ≥0.3s 或按住右键；进入施法状态立即撤盾
+	# （录制面板打开时不启用：选法术页的张掌不是要举盾）
 	var shield_want := false
-	if not battle3d.is_over:
+	if not battle3d.is_over and (record_panel == null or not record_panel.is_open()):
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			shield_want = true
 		elif pose == PoseClassifier.Pose.PALM and fsm.state == GestureFSM.State.IDLE:

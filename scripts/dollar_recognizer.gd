@@ -34,6 +34,37 @@ func add_polyline_template(p_name: String, pts: Array) -> void:
 	})
 
 
+## 玩家录制样本：与内置模板同一条归一化管线，带 user 标记便于统计/清理。
+## 圆形沿用 recognize() 里"circle_like 门槛"的既有规则，不做特殊处理。
+func add_recorded_template(p_name: String, pts: Array) -> void:
+	templates.append({
+		"name": p_name,
+		"points": _normalize_for_matching(pts),
+		"user": true,
+	})
+
+
+## 各符文模板计数：{符文名: {"builtin": n, "user": n}}
+func template_counts() -> Dictionary:
+	var out := {}
+	for t in templates:
+		if not out.has(t.name):
+			out[t.name] = {"builtin": 0, "user": 0}
+		var key := "user" if t.get("user", false) else "builtin"
+		out[t.name][key] += 1
+	return out
+
+
+## 清除玩家样本。p_name 为空 = 全部；否则只清该符文。内置模板不受影响。
+func clear_user_templates(p_name := "") -> void:
+	var kept: Array[Dictionary] = []
+	for t in templates:
+		if t.get("user", false) and (p_name.is_empty() or t.name == p_name):
+			continue
+		kept.append(t)
+	templates = kept
+
+
 func _circle_points() -> Array:
 	var pts: Array = []
 	for i in range(33):

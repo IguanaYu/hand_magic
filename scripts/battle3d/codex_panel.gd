@@ -10,6 +10,7 @@ const CARD_GAP := 20.0
 const PANEL_PAD_X := 40.0
 
 var fsm: GestureFSM   # main.gd 注入
+var open_guard: Callable  # 返回 true 时禁止打开（与录制面板互斥）
 
 var _root: Control
 var _open := false
@@ -63,7 +64,7 @@ func _build() -> void:
 	cards.position = panel_pos + Vector2(PANEL_PAD_X, 84.0)
 	_root.add_child(cards)
 
-	var f1 := _label(_root, Rect2(0.0, panel_pos.y + 330.0, vp.x, 26.0), "施法三步：① 握拳蓄力 → ② 食指画符 → ③ 张掌释放", 17, Color(1.0, 0.95, 0.85))
+	var f1 := _label(_root, Rect2(0.0, panel_pos.y + 330.0, vp.x, 26.0), "施法两步：① 食指伸出，动起来自动起笔 → ② 画完停住手指（或张掌）即施放", 17, Color(1.0, 0.95, 0.85))
 	f1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var f2 := _label(_root, Rect2(0.0, panel_pos.y + 360.0, vp.x, 22.0), "空闲张掌 / 按住右键 = 护盾 ｜ 数字键直放法术 ｜ R 重开 ｜ F1 调试", 14, Color(0.85, 0.88, 0.95, 0.9))
 	f2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -90,6 +91,8 @@ func is_open() -> bool:
 
 func open() -> void:
 	if _open:
+		return
+	if open_guard.is_valid() and open_guard.call():
 		return
 	_open = true
 	_root.visible = true

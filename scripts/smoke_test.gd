@@ -82,6 +82,14 @@ static func run() -> int:
 	print("%s debounce: 持续喂拳→掌各6帧均切换（拳=%s 掌=%s）" % [
 		"[PASS]" if switch_ok else "[FAIL]", fist_turn, palm_turn])
 
+	# ---------- 符文样本存取 + 用户模板 ----------
+	var rs_ok := _test_rune_samples(pass_count)
+	pass_count += rs_ok[0]
+	fail_count += rs_ok[1]
+	var rt_ok := _test_user_templates(pass_count)
+	pass_count += rt_ok[0]
+	fail_count += rt_ok[1]
+
 	# FSM 快速走查：聚气→画圆→施放
 	var fsm := GestureFSM.new()
 	# 注意：GDScript lambda 按值捕获局部变量，计数器必须用引用类型容器
@@ -165,3 +173,71 @@ static func _make_drawing() -> Array:
 	lms[16] = Vector2(0.58, 0.62)
 	lms[20] = Vector2(0.62, 0.65)
 	return lms
+
+
+## 符文样本存取器单测：校验/上限/存读回环（写测试路径，不碰真实存档）
+static func _test_rune_samples(passed: int) -> Array:
+	var p := 0
+	var f := 0
+	var rs := RuneSamples.new()
+	rs.save_path = "user://test_rune_samples.json"
+	rs.clear_all()
+
+	var short_ok: bool = rs.add("fireball", [Vector2(0.5, 0.5), Vector2(0.51, 0.5)]) == "invalid"
+	var circle := _make_circle(Vector2(0.5, 0.5), 0.15)
+	var add1_ok: bool = rs.add("fireball", circle) == "ok"
+	for i in range(RuneSamples.MAX_PER_SPELL):
+		rs.add("fireball", circle)
+	var cap_ok: bool = rs.add("fireball", circle) == "full" and rs.count("fireball") == RuneSamples.MAX_PER_SPELL
+	var save_ok: bool = rs.save()
+
+	var rs2 := RuneSamples.new()
+	rs2.save_path = rs.save_path
+	var load_ok: bool = rs2.load() and rs2.count("fireball") == RuneSamples.MAX_PER_SPELL
+	var pts_ok := false
+	if rs2.count("fireball") > 0:
+		var back: Array = rs2.samples["fireball"][0]
+		pts_ok = back.size() == circle.size() and back[0].distance_to(circle[0]) < 0.001
+
+	for name_ok in [short_ok, add1_ok, cap_ok, save_ok, load_ok, pts_ok]:
+		if name_ok:
+			p += 1
+		else:
+			f += 1
+	print("%s samples: 校验=%s 追加=%s 上限=%s 存档=%s 读档=%s 坐标=%s" % [
+		"[PASS]" if f == 0 else "[FAIL]", short_ok, add1_ok, cap_ok, save_ok, load_ok, pts_ok])
+	rs2.clear_all()
+	rs2.save()
+	return [p, f]
+
+
+## 用户模板单测：计数、录制样本参与识别、清理还原
+static func _test_user_templates(passed: int) -> Array:
+	var p := 0
+	var f := 0
+	var rec := DollarRecognizer.new()
+	var base: Dictionary = rec.template_counts()
+	var builtin_ok: bool = base.size() == 4 and base["circle"]["builtin"] == 1 and base["circle"]["user"] == 0
+
+	# 录一个"手抖的圆"样本：比内置圆更接近真人画法，识别应稳定判圆
+	var wobbly := _make_circle(Vector2(0.48, 0.52), 0.13)
+	for i in range(wobbly.size()):
+		wobbly[i] += Vector2(sin(i * 1.7) * 0.01, cos(i * 2.3) * 0.01)
+	rec.add_recorded_template("circle", wobbly)
+	var counts: Dictionary = rec.template_counts()
+	var count_ok: bool = counts["circle"]["user"] == 1 and counts["circle"]["builtin"] == 1
+	var got: Dictionary = rec.recognize(wobbly)
+	var recog_ok: bool = got.name == "circle" and got.score >= 0.8
+
+	rec.clear_user_templates("circle")
+	var after: Dictionary = rec.template_counts()
+	var clear_ok: bool = after["circle"]["user"] == 0 and after["circle"]["builtin"] == 1 and after.size() == base.size()
+
+	for name_ok in [builtin_ok, count_ok, recog_ok, clear_ok]:
+		if name_ok:
+			p += 1
+		else:
+			f += 1
+	print("%s user_template: 计数基线=%s 录后计数=%s 样本识别=%s(%s %.2f) 清理=%s" % [
+		"[PASS]" if f == 0 else "[FAIL]", builtin_ok, count_ok, recog_ok, got.name, got.score, clear_ok])
+	return [p, f]

@@ -220,7 +220,102 @@ func _run() -> void:
 	_check("波次表：第2波 1 运输机 0 维京 / 第4波 1 维京",
 		int(w2["medivacs"]) == 1 and int(w2["vikings"]) == 0 and int(w4["vikings"]) == 1)
 
+	# ===== 符文录制面板（G / HUD 按钮）=====
+
+	var main_ref: Node2D = get_parent()
+	var panel: RuneRecordPanel = main_ref.record_panel
+	var store: RuneSamples = main_ref.rune_store
+	_check("录制：面板/存取器/识别器接线完整",
+		panel != null and store != null and main_ref.fsm.recognizer != null)
+	if panel != null and store != null:
+		# 测试隔离：换测试存档路径，不碰玩家真实样本
+		store.save_path = "user://test_rune_samples.json"
+		store.clear_all()
+		store.save()
+		var rec: DollarRecognizer = main_ref.fsm.recognizer
+		var user_before: int = rec.template_counts()["circle"]["user"]
+		var casts_before: int = main_ref.fsm.cast_count
+		process_mode = Node.PROCESS_MODE_ALWAYS  # 暂停期间测试驱动帧继续跑
+		main_ref.mode3d = true  # 测试模式早退没置这个标志：置位后 main._process 才会驱动 _process_3d 手势管线
+		panel.open()
+		_check("录制：打开面板即暂停", get_tree().paused and panel.is_open())
+		_check("录制：战场冻结", battlefield.process_mode == Node.PROCESS_MODE_DISABLED)
+		panel.select_spell("fireball")
+		# 握拳进聚气（等多数表决确认）
+		var t0 := Time.get_ticks_msec()
+		while main_ref.fsm.state != GestureFSM.State.CHARGE and Time.get_ticks_msec() - t0 < 3000:
+			main_ref._on_hands_updated([_fist_hand()])
+			await get_tree().process_frame
+		_check("录制：握拳进入聚气", main_ref.fsm.state == GestureFSM.State.CHARGE)
+		# 伸指待命 + 画圆
+		for i in range(10):
+			main_ref._on_hands_updated([_drawing_hand(_rec_circle(0))])
+			await get_tree().process_frame
+		var ci := 0
+		while ci < 40:
+			main_ref._on_hands_updated([_drawing_hand(_rec_circle(ci))])
+			ci += 1
+			await get_tree().process_frame
+		_check("录制：进入画符", main_ref.fsm.state == GestureFSM.State.DRAWING)
+		# 握拳收笔 → 录制面板存样本（法术不触发，法力回满，FSM 归位）
+		t0 = Time.get_ticks_msec()
+		while main_ref.fsm.state != GestureFSM.State.COOLDOWN and Time.get_ticks_msec() - t0 < 2000:
+			main_ref._on_hands_updated([_fist_hand()])
+			await get_tree().process_frame
+		_check("录制：一笔存入样本", store.count("fireball") == 1)
+		_check("录制：识别器即时注入新模板",
+			rec.template_counts()["circle"]["user"] == user_before + 1)
+		_check("录制：FSM 收笔计数+1", main_ref.fsm.cast_count == casts_before + 1)
+		_check("录制：存档已写盘", FileAccess.file_exists(store.save_path))
+		_check("录制：全程保持暂停", get_tree().paused)
+		panel.close()
+		_check("录制：关闭恢复不暂停+战场解冻",
+			not get_tree().paused and battlefield.process_mode == Node.PROCESS_MODE_INHERIT)
+		main_ref.mode3d = false
+		store.clear_all()
+		store.save()
+		process_mode = Node.PROCESS_MODE_INHERIT
+
 	_finish()
+
+
+func _fist_hand(palm := Vector2(0.5, 0.5)) -> Dictionary:
+	var lms: Array = SmokeTest._make_fist()
+	var cur: Vector2 = (lms[0] + lms[5] + lms[9] + lms[17]) / 4.0
+	var off: Vector2 = palm - cur
+	var out: Array = []
+	for l in lms:
+		out.append(l + off)
+	return {"label": "Right", "points": out, "palm": palm, "palm_raw": palm, "index_tip": out[8]}
+
+
+func _drawing_hand(tip: Vector2) -> Dictionary:
+	# 与 e2e_test 同款：食指链指向 tip，其余三指收拢（落在画符姿阈值内）
+	var wrist := Vector2(0.5, 0.74)
+	var v := tip - wrist
+	var l := v.length()
+	var palm_size := 0.11
+	var dir := v / maxf(l, 1e-5)
+	var lms: Array = []
+	for i in range(21):
+		lms.append(wrist)
+	lms[5] = wrist + Vector2(-0.08, 0.02)
+	lms[9] = wrist + dir * palm_size
+	lms[13] = wrist + Vector2(0.08, 0.03)
+	lms[17] = wrist + Vector2(0.10, 0.06)
+	lms[6] = wrist + dir * (palm_size + (l - palm_size) * 0.33)
+	lms[7] = wrist + dir * (palm_size + (l - palm_size) * 0.66)
+	lms[8] = tip
+	lms[12] = lms[9] + dir * 0.02
+	lms[16] = lms[13] + dir * 0.02
+	lms[20] = lms[17] + dir * 0.02
+	return {"label": "Right", "points": lms, "palm": (lms[0] + lms[5] + lms[9] + lms[17]) / 4.0,
+		"palm_raw": lms[9], "index_tip": tip}
+
+
+func _rec_circle(i: int) -> Vector2:
+	var t := TAU * i / 39.0
+	return Vector2(0.5, 0.40) + Vector2(cos(t - PI / 2.0), sin(t - PI / 2.0)) * 0.12
 
 
 func _finish() -> void:

@@ -26,7 +26,7 @@
 [PASS] 冰域: 施放计数+1
 [PASS] 冰域: 靶1被冰冻未击碎
 [PASS] 冰域: 全场无击碎
-  dbg[ice_field]: cast=3/3 fizz=0() last={ "name": "triangle", "score": 0.91659769155981 } trail=39 mana=54 traj=39
+  dbg[ice_field]: cast=3/3 fizz=0() last={ "name": "triangle", "score": 0.91659769155981 } trail=39 mana=53 traj=39
   cast_traj: n=39 采样=(0.548,0.380) (0.596,0.460) (0.644,0.540) (0.620,0.580) (0.524,0.580) (0.428,0.580) (0.332,0.580) (0.380,0.500) (0.428,0.420) (0.476,0.340) →重识别=triangle(0.917)
 [PASS] wind_blade: 握拳进入聚气
 [PASS] wind_blade: 伸指进入待命
@@ -48,5 +48,5 @@
 [PASS] 取消: 张掌保持500ms回到待机
 [PASS] 停笔: 指尖停住自动收笔施放
 [PASS] 握拳收笔: 画符中握拳确认施放
-[PASS] 性能: 识别单次耗时 11.51ms (阈值12ms)
-recognize_avg_ms=11.51
+[PASS] 性能: 识别单次耗时 10.94ms (阈值12ms)
+recognize_avg_ms=10.94
