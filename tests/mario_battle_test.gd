@@ -130,6 +130,42 @@ func _run() -> void:
 	bs.take_damage(9999.0)
 	_check("库巴击破：计 500 分 + 死亡", not bs.alive and battlefield.score >= score3 + 500)
 
+	# --- 软分离：重叠自动分开 / 巡逻兵迎面顶回掉头 / 静止壳不被推走 ---
+	var p1: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	p1.global_position = Vector3(-0.45, 0.0, -16.0)
+	p1.speed = 0.0
+	var p2: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	p2.global_position = Vector3(0.45, 0.0, -16.0)
+	p2.speed = 0.0
+	await get_tree().create_timer(0.5).timeout
+	_check("软分离：重叠栗宝宝自动分开（d=%.2f）" % p1.global_position.distance_to(p2.global_position),
+		p1.alive and p2.alive and p1.global_position.distance_to(p2.global_position) >= 1.25)
+	# 迎面相遇：出生即重叠→首帧被顶回并掉头（speed 抖动已手动定值，掉头与驻足随机无关）
+	var h1: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	h1.global_position = Vector3(-0.45, 0.0, -12.0)
+	h1.speed = 1.5
+	var h2: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	h2.global_position = Vector3(0.45, 0.0, -12.0)
+	h2.speed = 1.5
+	await get_tree().create_timer(1.0).timeout
+	_check("软分离：迎面顶回掉头不穿模（d=%.2f dir=%d/%d）"
+		% [h1.global_position.distance_to(h2.global_position), h1.walk_dir, h2.walk_dir],
+		h1.alive and h2.alive
+		and h1.global_position.distance_to(h2.global_position) >= 1.25
+		and h1.walk_dir < 0.0 and h2.walk_dir > 0.0)
+	# 静止壳只当障碍物：壳不被推走，栗宝宝绕开
+	var sh2: MarioEnemy3D = battlefield.spawn_enemy("shell")
+	sh2.global_position = Vector3(5.0, 0.0, -20.0)
+	var sw: MarioEnemy3D = battlefield.spawn_enemy("goomba")
+	sw.global_position = Vector3(5.6, 0.0, -20.0)
+	sw.speed = 0.0
+	await get_tree().create_timer(0.5).timeout
+	_check("软分离：静止壳不被推走（x=%.2f），栗宝宝绕开" % sh2.global_position.x,
+		sh2.alive and is_equal_approx(sh2.global_position.x, 5.0)
+		and sh2.global_position.distance_to(sw.global_position) >= 1.1)
+	for we in [p1, p2, h1, h2, sw]:
+		we.take_damage(999.0)  # 清场；残壳由下方 restart() 统一回收
+
 	# --- 波次表 ---
 	var w1 := MarioWaveTable.wave(1)
 	var w4 := MarioWaveTable.wave(4)

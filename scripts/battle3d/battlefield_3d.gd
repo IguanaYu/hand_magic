@@ -137,6 +137,7 @@ func _process(delta: float) -> void:
 	_refresh_hud()
 	_update_camera(delta)
 	_hitstop_cd = maxf(0.0, _hitstop_cd - delta)
+	_separate_enemies()
 	crosshair.on_enemy = spell_caster.scan_enemy(get_viewport().get_mouse_position()) != null
 	shield.active = (shield_up or shield_force) and not is_over
 	# 护盾挡弹
@@ -609,6 +610,40 @@ func _alive_count() -> int:
 		if e.alive:
 			n += 1
 	return n
+
+
+## ---------- 地面软分离（防模型位置重叠） ----------
+## 两两检查地面单位：中心距小于半径和就推开——可动单位各退一半重叠量；
+## 冻结/硬直/静止壳只当障碍物，由对方全额让开。空军不参与。
+## 巡逻兵被迎面顶回时经 on_separated 掉头，避免顶牛死锁。O(n²)，场上 ≤20 只可忽略。
+func _separate_enemies() -> void:
+	var n := enemies.size()
+	if n < 2:
+		return
+	for i in n:
+		var a := enemies[i]
+		if not is_instance_valid(a) or not a.is_sep_movable():
+			continue
+		var push := Vector3.ZERO
+		for j in n:
+			if j == i:
+				continue
+			var b := enemies[j]
+			if not is_instance_valid(b) or not b.is_sep_obstacle():
+				continue
+			var min_d := a.body_radius + b.body_radius
+			var off := a.global_position - b.global_position
+			# 含 y 距离：空投单位下落途中不挤周边，贴地才参与
+			var d := off.length()
+			if d >= min_d:
+				continue
+			var dir := off / d if d > 0.05 else Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
+			dir.y = 0.0
+			var step := dir * (min_d - d) * 0.5
+			a.global_position += step
+			push += step
+		if push.length_squared() > 0.0001:
+			a.on_separated(push)
 
 
 func _on_enemy_died(u: EnemyUnit3D) -> void:

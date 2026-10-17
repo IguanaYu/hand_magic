@@ -13,11 +13,11 @@ enum State { ADVANCE, HALT, FIRE, MELEE, DIE, FLY_IN, STRAFE, HOVER_DROP, FLY_OU
 
 const UNIT_STATS := {
 	"marine": {"hp": 30.0, "speed": 1.6, "stop_dist": 10.0, "score": 10, "scale": 1.4,
-		"aim_h": 0.9, "shadow": 1.4,
+		"aim_h": 0.9, "shadow": 1.4, "radius": 1.0,
 		"fire_interval": 1.8, "burst": 3, "burst_gap": 0.12, "dmg": 4.0,
 		"bullet_speed": 30.0, "hit_chance": 0.7, "miss_offset": 2.5},
 	"marauder": {"hp": 100.0, "speed": 1.1, "stop_dist": 14.0, "score": 30, "scale": 1.4,
-		"aim_h": 0.9, "shadow": 1.7,
+		"aim_h": 0.9, "shadow": 1.7, "radius": 1.2,
 		"fire_interval": 2.6, "burst": 1, "burst_gap": 0.0, "dmg": 12.0,
 		"bullet_speed": 12.0, "hit_chance": 0.9, "miss_offset": 2.0, "big_bullet": true},
 	"viking": {"hp": 130.0, "speed": 13.0, "score": 60, "scale": 6.5,
@@ -41,6 +41,8 @@ var hp: float = 30.0
 var max_hp: float = 30.0
 var speed := 1.6
 var stop_dist := 10.0
+## 软分离碰撞半径（战场每帧把重叠的地面单位推开，防模型穿插）
+var body_radius := 1.0
 var score_value := 10
 var alive := true
 var flying := false
@@ -97,6 +99,7 @@ func _ready() -> void:
 	hp = max_hp
 	speed = _stats["speed"]
 	stop_dist = float(_stats.get("stop_dist", 999.0))
+	body_radius = float(_stats.get("radius", 1.0))
 	score_value = _stats["score"]
 	if drop_count <= 0:
 		drop_count = int(_stats.get("drops", 4))
@@ -445,6 +448,23 @@ func knockback(dir_xz: Vector3, dist: float) -> void:
 		d = d.normalized()
 		var tw := create_tween()
 		tw.tween_property(self, "global_position", global_position + d * dist, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+# ---------- 软分离（战场每帧推开重叠的地面单位，防模型穿插） ----------
+
+## 是否作为障碍参与分离。空军在天上有自己的高度/航线，不参与。
+func is_sep_obstacle() -> bool:
+	return alive and not flying
+
+
+## 本帧是否可被推开：冻结/硬直中的单位保持原地，只当障碍物让敌人绕开。
+func is_sep_movable() -> bool:
+	return is_sep_obstacle() and frozen_t <= 0.0 and stun_t <= 0.0
+
+
+## 被分离推开后回调（push=本帧累计位移），子类可据此做巡逻掉头等反应。
+func on_separated(_push: Vector3) -> void:
+	pass
 
 
 # ---------- 开火 ----------

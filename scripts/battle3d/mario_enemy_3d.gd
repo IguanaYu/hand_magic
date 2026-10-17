@@ -14,12 +14,12 @@ extends EnemyUnit3D
 ## 壳只有 shell_move、金币 coin_idle；原始尺寸 0.3~0.7m（anim_probe_mario 实测），
 ## scale 按战斗距离校准：栗宝宝≈0.95m 高、库巴≈2.9m 高压场。
 const MARIO_STATS := {
-	"goomba": {"hp": 1.0, "speed": 1.25, "score": 10, "scale": 2.2, "aim_h": 0.45, "shadow": 0.5},
-	"koopa": {"hp": 1.0, "speed": 1.0, "score": 15, "scale": 2.2, "aim_h": 0.45, "shadow": 0.5},
-	"shell": {"hp": 1.0, "speed": 0.0, "score": 15, "scale": 1.6, "aim_h": 0.25, "shadow": 0.45},
+	"goomba": {"hp": 1.0, "speed": 1.25, "score": 10, "scale": 2.2, "aim_h": 0.45, "shadow": 0.5, "radius": 0.7},
+	"koopa": {"hp": 1.0, "speed": 1.0, "score": 15, "scale": 2.2, "aim_h": 0.45, "shadow": 0.5, "radius": 0.7},
+	"shell": {"hp": 1.0, "speed": 0.0, "score": 15, "scale": 1.6, "aim_h": 0.25, "shadow": 0.45, "radius": 0.5},
 	"boo": {"hp": 60.0, "speed": 0.85, "score": 50, "scale": 2.3, "aim_h": 0.55, "shadow": 0.55,
 		"flying": true, "fly_height": 3.2},
-	"bowser": {"hp": 600.0, "speed": 0.9, "score": 500, "scale": 4.2, "aim_h": 1.5, "shadow": 1.4},
+	"bowser": {"hp": 600.0, "speed": 0.9, "score": 500, "scale": 4.2, "aim_h": 1.5, "shadow": 1.4, "radius": 1.8},
 }
 const PATROL_MIN_X := -14.0
 const PATROL_MAX_X := 14.0
@@ -58,6 +58,7 @@ func _ready() -> void:
 	speed = float(_stats["speed"])
 	if unit_key != "bowser" and unit_key != "shell":
 		speed *= randf_range(0.85, 1.15)  # 同种个体速度抖动，队形自然散开
+	body_radius = float(_stats.get("radius", 0.7))  # 覆写 _ready 未走基类，半径需自取
 	score_value = int(_stats["score"])
 	var ps: PackedScene = load("res://assets3d/mario/%s.glb" % unit_key)
 	_model = ps.instantiate()
@@ -462,6 +463,22 @@ func _shell_out() -> void:
 ## 马里奥单位自管位移：地面兵不掉队形、boss 打不动、boo 击飞在 apply_spell 里做
 func knockback(_dir_xz: Vector3, _dist: float) -> void:
 	pass
+
+
+## 软分离：飞行壳不参与（它靠撞击半径撞杀，不该把路上的敌人推开）；
+## 静止壳是场景物件，只当障碍物、本身不被推走。
+func is_sep_obstacle() -> bool:
+	return mstate != MState.SHELL_FLY and super()
+
+
+func is_sep_movable() -> bool:
+	return mstate != MState.SHELL_STILL and super()
+
+
+## 巡逻兵被迎面顶回：掉头继续逛，避免顶牛卡死
+func on_separated(push: Vector3) -> void:
+	if absf(push.x) > 0.05 and (push.x < 0.0) == (walk_dir > 0.0):
+		walk_dir *= -1.0
 
 
 # ---------- 死亡演出 ----------

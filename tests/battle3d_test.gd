@@ -75,6 +75,34 @@ func _run() -> void:
 	_check("冻结：掠夺者 frozen_t>0 且 HP=100", m.frozen_t > 0.0 and is_equal_approx(m.hp, 100.0))
 	m.take_damage(999.0)
 
+	# --- 软分离：重叠的地面单位自动推开（不让模型位置重叠） ---
+	var sep_a: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
+	sep_a.global_position = Vector3(-0.4, 0.0, -20.0)
+	sep_a.speed = 0.0
+	var sep_b: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
+	sep_b.global_position = Vector3(0.4, 0.0, -20.0)
+	sep_b.speed = 0.0
+	await get_tree().create_timer(0.5).timeout
+	_check("软分离：重叠枪兵自动推开（d=%.2f）" % sep_a.global_position.distance_to(sep_b.global_position),
+		sep_a.alive and sep_b.alive
+		and sep_a.global_position.distance_to(sep_b.global_position) >= 1.7)
+	# 冻结单位保持原地当障碍物，对方绕开
+	var fz: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
+	fz.global_position = Vector3(6.0, 0.0, -20.0)
+	fz.speed = 0.0  # 星际版冻结=减速非定身，速度归零排除自走位移，单测分离不推冻结
+	fz.apply_freeze(3.0)
+	var wk: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
+	wk.global_position = Vector3(6.6, 0.0, -20.0)
+	wk.speed = 0.0
+	await get_tree().create_timer(0.5).timeout
+	_check("软分离：冻结单位不被推走（x=%.2f），对方让开" % fz.global_position.x,
+		fz.alive and is_equal_approx(fz.global_position.x, 6.0)
+		and fz.global_position.distance_to(wk.global_position) >= 1.7)
+	sep_a.take_damage(999.0)
+	sep_b.take_damage(999.0)
+	fz.take_damage(999.0)
+	wk.take_damage(999.0)
+
 	# ===== M1.2 战斗闭环 =====
 
 	# --- 敌方子弹命中玩家 ---
