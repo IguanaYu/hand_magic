@@ -241,23 +241,20 @@ func _run() -> void:
 		_check("录制：打开面板即暂停", get_tree().paused and panel.is_open())
 		_check("录制：战场冻结", battlefield.process_mode == Node.PROCESS_MODE_DISABLED)
 		panel.select_spell("fireball")
-		# 握拳进聚气（等多数表决确认）
+		# 捏合落笔（等多数表决确认进画符）
 		var t0 := Time.get_ticks_msec()
-		while main_ref.fsm.state != GestureFSM.State.CHARGE and Time.get_ticks_msec() - t0 < 3000:
-			main_ref._on_hands_updated([_fist_hand()])
+		while main_ref.fsm.state != GestureFSM.State.DRAWING and Time.get_ticks_msec() - t0 < 3000:
+			main_ref._on_hands_updated([_pinch_hand(_rec_circle(0))])
 			await get_tree().process_frame
-		_check("录制：握拳进入聚气", main_ref.fsm.state == GestureFSM.State.CHARGE)
-		# 伸指待命 + 画圆
-		for i in range(10):
-			main_ref._on_hands_updated([_drawing_hand(_rec_circle(0))])
-			await get_tree().process_frame
+		_check("录制：捏合落笔进入画符", main_ref.fsm.state == GestureFSM.State.DRAWING)
+		# 捏合走轨迹画圆
 		var ci := 0
 		while ci < 40:
-			main_ref._on_hands_updated([_drawing_hand(_rec_circle(ci))])
+			main_ref._on_hands_updated([_pinch_hand(_rec_circle(ci))])
 			ci += 1
 			await get_tree().process_frame
-		_check("录制：进入画符", main_ref.fsm.state == GestureFSM.State.DRAWING)
-		# 握拳收笔 → 录制面板存样本（法术不触发，法力回满，FSM 归位）
+		_check("录制：画圆保持画符态", main_ref.fsm.state == GestureFSM.State.DRAWING)
+		# 握拳收笔（松开确认兼容路径）→ 录制面板存样本（法术不触发，法力回满，FSM 归位）
 		t0 = Time.get_ticks_msec()
 		while main_ref.fsm.state != GestureFSM.State.COOLDOWN and Time.get_ticks_msec() - t0 < 2000:
 			main_ref._on_hands_updated([_fist_hand()])
@@ -311,6 +308,19 @@ func _drawing_hand(tip: Vector2) -> Dictionary:
 	lms[20] = lms[17] + dir * 0.02
 	return {"label": "Right", "points": lms, "palm": (lms[0] + lms[5] + lms[9] + lms[17]) / 4.0,
 		"palm_raw": lms[9], "index_tip": tip}
+
+
+func _pinch_hand(tip: Vector2) -> Dictionary:
+	# 捏合画符手：_drawing_hand 基础上把拇指链钉到 tip（捏距 0）
+	var hand := _drawing_hand(tip)
+	var lms: Array = hand["points"]
+	var wrist: Vector2 = lms[0]
+	lms[1] = wrist + Vector2(-0.10, -0.02)
+	lms[2] = wrist + (tip - wrist) * 0.35 + Vector2(-0.04, 0.0)
+	lms[3] = wrist + (tip - wrist) * 0.70 + Vector2(-0.02, 0.0)
+	lms[4] = tip
+	return {"label": "Right", "points": lms, "palm": hand["palm"],
+		"palm_raw": hand["palm_raw"], "index_tip": tip}
 
 
 func _rec_circle(i: int) -> Vector2:

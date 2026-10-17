@@ -428,9 +428,9 @@ func _build_scene() -> void:
 	add_child(skeleton)
 
 	if practice_mode:
-		hud.set_hint("握拳聚气 → 伸食指画符 → 张掌施放　|　◯圆=火球　Z=链电　△=冰域　/=风刃　|　F1 HUD　R 重置　ESC 退出")
+		hud.set_hint("捏合拇指食指=落笔，松开=施放　|　◯圆=火球　Z=链电　△=冰域　/=风刃　|　F1 HUD　R 重置　ESC 退出")
 	else:
-		hud.set_hint("握拳→张掌 = 掌心火弹　|　握拳→画◯→张掌 = 火球AoE　|　Z=链电 △=冰域(减速) /=风刃　|　R 重开　ESC 退出")
+		hud.set_hint("捏合画符，松开施放　|　拳→张掌 = 掌心火弹　|　◯=火球　Z=链电　△=冰域　/=风刃　|　右键护盾　R 重开　ESC 退出")
 
 	tracker = HandTracker.new()
 	add_child(tracker)
@@ -545,7 +545,7 @@ func _process(delta: float) -> void:
 			elif fsm.state == GestureFSM.State.CHARGE and (m - _mouse_down_pos).length() < 0.015:
 				pose = PoseClassifier.Pose.FIST  # 原地按住不动画符 → 松开即掌心火弹
 			else:
-				pose = PoseClassifier.Pose.DRAWING
+				pose = PoseClassifier.Pose.PINCH  # 按住移动=落笔画符，松开=收笔（与捏合同语义）
 			index_tip = m
 			anchor = m
 		elif fsm.state == GestureFSM.State.DRAWING:
@@ -623,7 +623,7 @@ func _process_3d(delta: float) -> void:
 			elif fsm.state == GestureFSM.State.CHARGE and (m - _mouse_down_pos).length() < 0.015:
 				pose = PoseClassifier.Pose.FIST
 			else:
-				pose = PoseClassifier.Pose.DRAWING
+				pose = PoseClassifier.Pose.PINCH  # 按住移动=落笔画符，松开=收笔（与捏合同语义）
 			index_tip = m
 			anchor = m
 		elif fsm.state == GestureFSM.State.DRAWING:
@@ -730,7 +730,8 @@ func _format_ratios() -> String:
 	var parts: Array = []
 	for v in r:
 		parts.append("%.2f" % float(v))
-	return "%s（拳<1.28/1.38 掌>1.62/1.52）" % "/".join(parts)
+	return "%s（拳<1.28/1.38 掌>1.62/1.52 捏合<%.2f/%.2f 食指>%.2f）" % [
+		"/".join(parts), PoseClassifier.PINCH_RATIO, PoseClassifier.PINCH_EXIT_RATIO, PoseClassifier.PINCH_INDEX_MIN]
 
 
 func _take_3d_shot() -> void:

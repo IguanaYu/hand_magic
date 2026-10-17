@@ -98,7 +98,7 @@ func select_spell(spell_id: String) -> void:
 	_selected = spell_id
 	_select_view.visible = false
 	_record_view.visible = true
-	_update_record_labels("画你的【%s】——伸指起笔，画完握拳收笔（鼠标：按住左键画，松开收）" % _spell_name(spell_id))
+	_update_record_labels("画你的【%s】——捏合拇指食指落笔起画，松开收笔（鼠标：按住左键画，松开收）" % _spell_name(spell_id))
 
 
 func _spell_name(spell_id: String) -> String:

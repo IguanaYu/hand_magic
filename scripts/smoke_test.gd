@@ -130,23 +130,10 @@ static func run() -> int:
 	pass_count += rt_ok[0]
 	fail_count += rt_ok[1]
 
-	# FSM 快速走查：聚气→画圆→施放
-	var fsm := GestureFSM.new()
-	# 注意：GDScript lambda 按值捕获局部变量，计数器必须用引用类型容器
-	var counters := {"casts": 0, "fizzles": 0, "reason": ""}
-	fsm.cast_performed.connect(func(_s, _a, _sc): counters.casts += 1)
-	fsm.fizzle.connect(func(r): counters.fizzles += 1; counters.reason = r)
-	fsm.update(PoseClassifier.Pose.FIST, true, Vector2(0.5, 0.6), Vector2(0.5, 0.6), 0.1)
-	var circle_pts := _make_circle(Vector2(0.5, 0.5), 0.15)
-	for p in circle_pts:
-		fsm.update(PoseClassifier.Pose.DRAWING, true, p, Vector2(0.5, 0.5), 0.03)
-	fsm.update(PoseClassifier.Pose.PALM, true, circle_pts[circle_pts.size() - 1], Vector2(0.5, 0.5), 0.1)
-	var fsm_ok: bool = counters.casts == 1
-	if fsm_ok:
-		pass_count += 1
-	else:
-		fail_count += 1
-	print("%s fsm: 拳→画圆→掌 = %d 次施放 %d 次失败(%s)（期望 1/0）" % ["[PASS]" if fsm_ok else "[FAIL]", counters.casts, counters.fizzles, counters.reason])
+	# FSM 捏合交互单测：主路径/预滚/闪断/静止不收笔/超时/latch/快弹
+	var fsm_ok := _test_fsm()
+	pass_count += fsm_ok[0]
+	fail_count += fsm_ok[1]
 
 	print("-------- 结果: %d PASS / %d FAIL --------" % [pass_count, fail_count])
 	# GDMP 卸载死锁导致 stdout 缓冲可能丢失：结果同步写入文件
@@ -248,6 +235,119 @@ static func _make_fist_touch() -> Array:
 	lms[3] = Vector2(0.44, 0.62)
 	lms[4] = lms[8]
 	return lms
+
+
+## FSM 捏合交互单测（delta=1/30s 定步进，帧数即时间，确定性断言）
+static func _test_fsm() -> Array:
+	var p := 0
+	var f := 0
+	var dt := 1.0 / 30.0
+	var anchor := Vector2(0.5, 0.5)
+
+	# --- 主路径：预滚攒 6 帧移动轨迹 → 捏合起笔（播种）→ 捏合画圆 → 松开 0.12s 收笔 ---
+	var counters := {"casts": 0, "fizzles": 0, "reason": ""}
+	var fsm := GestureFSM.new()
+	# 注意：GDScript lambda 按值捕获局部变量，计数器必须用引用类型容器
+	fsm.cast_performed.connect(func(_s, _a, _sc): counters.casts += 1)
+	fsm.fizzle.connect(func(r): counters.fizzles += 1; counters.reason = r)
+	var circle := _make_circle(Vector2(0.5, 0.5), 0.15)
+	for i in range(6):
+		fsm.update(PoseClassifier.Pose.NONE, true, circle[0].lerp(circle[1], i / 5.0), anchor, dt)
+	fsm.update(PoseClassifier.Pose.PINCH, true, circle[0], anchor, dt)
+	var start_ok: bool = fsm.state == GestureFSM.State.DRAWING and fsm.trajectory.size() >= 4
+	for i in range(1, circle.size()):
+		fsm.update(PoseClassifier.Pose.PINCH, true, circle[i], anchor, dt)
+	var n_drawn: int = fsm.trajectory.size()
+	for i in range(3):  # 3 帧 = 0.1s < 0.12s：还没到确认时长
+		fsm.update(PoseClassifier.Pose.DRAWING, true, circle[circle.size() - 1], anchor, dt)
+	var hold_ok: bool = fsm.state == GestureFSM.State.DRAWING and fsm.trajectory.size() == n_drawn and counters.casts == 0
+	fsm.update(PoseClassifier.Pose.DRAWING, true, circle[circle.size() - 1], anchor, dt)  # 第 4 帧 0.132s ≥ 0.12s
+	var main_ok: bool = start_ok and hold_ok and counters.casts == 1 and counters.fizzles == 0
+	if main_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.pinch: 起笔含预滚(%d点)=%s 松开中不采样=%s 收笔施放=%d次失败=%d" % [
+		"[PASS]" if main_ok else "[FAIL]", n_drawn, start_ok, hold_ok, counters.casts, counters.fizzles])
+
+	# --- latch：施放后捏着不松，冷却结束回 IDLE 也不自动重画；松开一次后恢复 ---
+	for i in range(35):  # 1.17s > 0.8s 冷却：中途转 IDLE，latch 挡住重画
+		fsm.update(PoseClassifier.Pose.PINCH, true, circle[0], anchor, dt)
+	var latch_ok: bool = fsm.state == GestureFSM.State.IDLE
+	fsm.update(PoseClassifier.Pose.PINCH, true, circle[0], anchor, dt)
+	latch_ok = latch_ok and fsm.state == GestureFSM.State.IDLE
+	fsm.update(PoseClassifier.Pose.NONE, true, circle[0], anchor, dt)  # 松开一次
+	fsm.update(PoseClassifier.Pose.PINCH, true, circle[0], anchor, dt)
+	latch_ok = latch_ok and fsm.state == GestureFSM.State.DRAWING
+	if latch_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.latch: 施放后捏着不自动重画，松开一次恢复" % ["[PASS]" if latch_ok else "[FAIL]"])
+
+	# --- 闪断：画符中 2 帧非捏合（0.067s < 0.12s）不中断不收笔，继续画完照常施放 ---
+	var counters2 := {"casts": 0}
+	var fsm2 := GestureFSM.new()
+	fsm2.cast_performed.connect(func(_s, _a, _sc): counters2.casts += 1)
+	var pts2 := _make_circle(Vector2(0.35, 0.5), 0.12)
+	fsm2.update(PoseClassifier.Pose.PINCH, true, pts2[0], anchor, dt)
+	for i in range(1, 20):
+		fsm2.update(PoseClassifier.Pose.PINCH, true, pts2[i], anchor, dt)
+	fsm2.update(PoseClassifier.Pose.FIST, true, pts2[19], anchor, dt)   # 闪断帧1
+	fsm2.update(PoseClassifier.Pose.NONE, true, pts2[19], anchor, dt)   # 闪断帧2
+	var flash_ok: bool = fsm2.state == GestureFSM.State.DRAWING and counters2.casts == 0
+	for i in range(20, pts2.size()):
+		fsm2.update(PoseClassifier.Pose.PINCH, true, pts2[i], anchor, dt)
+	fsm2.update(PoseClassifier.Pose.PALM, true, pts2[pts2.size() - 1], anchor, dt)
+	flash_ok = flash_ok and counters2.casts == 1
+	if flash_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.flash: 闪断2帧不中断，画完照常施放（cast=%d）" % ["[PASS]" if flash_ok else "[FAIL]", counters2.casts])
+
+	# --- 静止不收笔：旧速度收笔兜底已删，捏着不动 1.3s 不结束（回归锚）---
+	var counters3 := {"casts": 0, "fizzles": 0}
+	var fsm3 := GestureFSM.new()
+	fsm3.cast_performed.connect(func(_s, _a, _sc): counters3.casts += 1)
+	fsm3.fizzle.connect(func(_r): counters3.fizzles += 1)
+	var pts3 := _make_circle(Vector2(0.65, 0.5), 0.12)
+	fsm3.update(PoseClassifier.Pose.PINCH, true, pts3[0], anchor, dt)
+	for i in range(1, 15):
+		fsm3.update(PoseClassifier.Pose.PINCH, true, pts3[i], anchor, dt)
+	for i in range(40):  # 1.33s 静止
+		fsm3.update(PoseClassifier.Pose.PINCH, true, pts3[14], anchor, dt)
+	var static_ok: bool = fsm3.state == GestureFSM.State.DRAWING and counters3.casts == 0 and counters3.fizzles == 0
+	if static_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.static: 捏合静止1.3s不收笔（旧速度收笔已删）" % ["[PASS]" if static_ok else "[FAIL]"])
+
+	# --- 超时收笔：接着静止越过 2.5s → 按现有轨迹收笔进冷却 ---
+	for i in range(30):  # 累计 > 2.5s
+		fsm3.update(PoseClassifier.Pose.PINCH, true, pts3[14], anchor, dt)
+	var timeout_ok: bool = fsm3.state == GestureFSM.State.COOLDOWN
+	if timeout_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.timeout: 捏着不动超2.5s超时收笔" % ["[PASS]" if timeout_ok else "[FAIL]"])
+
+	# --- 快弹保留：拳→张掌 = 掌心火弹（CHARGE 仅剩的路径）---
+	var counters4 := {"quick": 0}
+	var fsm4 := GestureFSM.new()
+	fsm4.quick_shot_performed.connect(func(_a): counters4.quick += 1)
+	fsm4.update(PoseClassifier.Pose.FIST, true, Vector2(0.5, 0.5), anchor, dt)
+	fsm4.update(PoseClassifier.Pose.PALM, true, Vector2(0.5, 0.5), anchor, dt)
+	var quick_ok: bool = counters4.quick == 1
+	if quick_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.quick: 拳→张掌快速火弹保留" % ["[PASS]" if quick_ok else "[FAIL]"])
+
+	return [p, f]
 
 
 ## 符文样本存取器单测：校验/上限/存读回环（写测试路径，不碰真实存档）

@@ -1,12 +1,17 @@
 class_name GestureFSM
 extends Node
 ## 施法状态机（GDD §3.2）：
-## IDLE →(食指伸出/握拳×5帧)→ CHARGE →(指尖动起来)→ DRAWING →(握拳确认/停笔兜底/张掌)→ CAST/FIZZLE
-## 任意状态：张掌保持 500ms → IDLE；画符超时 2.5s → 视为收笔直接识别；丢手 0.6s → IDLE。
-## 画符中对姿势抖动宽容：短暂握拳（<FIST_CONFIRM_S）当伪影忽略，无姿势掉线不中断画符。
-## 收笔主路径=握拳确认（姿势信号经全点平滑+多数表决+滞回后可靠），
-## 兜底=速度判定（不握拳直接画完停住也能出招）：速度掉到本次画符峰值 25% 以下
-## 并保持 STROKE_STOP_MS 即判定收笔，绝对低速兜底低于正常挥动一个数量级。
+## IDLE ──捏合(拇指尖碰食指尖)──▶ DRAWING ──松开捏合0.12s/张掌/超时2.5s──▶ CAST/FIZZLE → COOLDOWN
+## IDLE/COOLDOWN ──握拳──▶ CHARGE(仅剩掌心火弹路径) ──张掌──▶ quick_shot
+## 捏合=落笔的显式声明（Vision Pro/Quest 空中绘画的行业标准方案）：旧"指尖动起来就起笔"
+## 的速度阈值对放松手完全不设防，误起笔频发；起笔权交还玩家后误触发在结构上消失。
+## 松开=抬笔：画符中非捏合持续 PINCH_RELEASE_CONFIRM_S 才收笔，短暂松劲闪断被吞掉且
+## 不采样（松开瞬间食指卷动会污染轨迹尾部）；张掌保留为立即收笔；握拳也走松开确认
+## ——旧的握拳收笔肌肉记忆仍然可用。
+## 起笔预滚：捏合检测有去抖滞后（5/7 帧表决），玩家捏上的瞬间手就开始动，
+## IDLE/CHARGE 期间滚动缓存最近 PREROLL_MS 的食指尖，起笔时先播种进轨迹防切头。
+## latch：施放/失败后仍捏着不松不自动重画，松开一次后恢复（起笔只认上升沿）。
+## 任意状态：张掌保持 500ms → IDLE；丢手 0.6s → IDLE。
 
 
 signal state_changed(state_name: String)
@@ -41,13 +46,10 @@ const COOLDOWN_TIME := 0.8
 const QUICK_COST := 8.0   # 掌心火弹法力（M0.5 快速施法）
 const QUICK_COOLDOWN := 0.5
 const DRAW_TIMEOUT := 2.5
-const FIST_CONFIRM_S := 0.12    # 画符中握拳保持此时长 = 确认收笔施放（主路径）
-const STROKE_START_SPEED := 0.2    # 起笔：指尖速度（归一化/秒）超过即开始画符
-const STROKE_START_DISP := 0.015   # 起笔兜底：测速窗内位移超过即开始（慢速小幅也认）
-const STROKE_STOP_S := 0.30        # 收笔：低速保持时长（秒）
-const STROKE_STOP_FRACTION := 0.25 # 收笔：速度低于峰值速度此比例
-const STROKE_STOP_SPEED := 0.12    # 收笔绝对兜底：正常挥动 0.5~2.0/s，手抖远低于此
-const SPEED_WINDOW_MS := 150       # 指尖测速滑窗
+const PINCH_RELEASE_CONFIRM_S := 0.12  # 画符中松开捏合持续此时长 = 确认收笔施放
+const PREROLL_MS := 200                # 起笔预滚缓冲：补偿姿势去抖（5/7 帧表决）的检测滞后
+const SAMPLE_MIN_DIST := 0.004         # 采样最小间距：滤静止堆点
+const SAMPLE_TELEPORT := 0.12          # 单帧跳变超过此值必为姿势切换伪影，丢弃
 const CAST_THRESHOLD := 0.80
 const AMBIGUOUS_THRESHOLD := 0.70
 const MANA_MAX := 100.0
@@ -69,12 +71,11 @@ var current_anchor := Vector2(0.5, 0.5)  # 掌心锚点：掌心火弹出手位�
 
 var _palm_hold_ms := 0
 var _no_hand_ms := 0.0
-var _fist_ms := 0.0
 var _cooldown_left := 0.0
-var _samples: Array = []      # 指尖测速滑窗 [t_ms, Vector2]
-var _stop_ms := 0.0
-var _peak_speed := 0.0        # 本次画符的峰值指尖速度（收笔按比例判定）
-var _charge_by_fist := false  # 经握拳进入聚气（掌心火弹仍走拳→掌老路径）
+var _preroll: Array = []      # 起笔预滚环 [t_ms, Vector2]（非 DRAWING 且有手时滚动记录食指尖）
+var _open_ms := 0.0           # 画符中非捏合（松开）持续时长
+var _draw_time := 0.0         # 本次画符累计时长（超时用；累积 delta 而非墙钟，测试可快进）
+var _pinch_latch := false     # 施放后仍捏着不松 → 不自动重画
 
 
 func reset() -> void:
@@ -83,11 +84,11 @@ func reset() -> void:
 	trajectory_start_ms = -1
 	_palm_hold_ms = 0
 	_no_hand_ms = 0.0
-	_fist_ms = 0.0
 	_cooldown_left = 0.0
-	_samples.clear()
-	_stop_ms = 0.0
-	_peak_speed = 0.0
+	_preroll.clear()
+	_open_ms = 0.0
+	_draw_time = 0.0
+	_pinch_latch = false
 	state_changed.emit("IDLE")
 
 
@@ -101,6 +102,12 @@ func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, 
 			reset()
 	else:
 		_no_hand_ms = 0.0
+		# 预滚：非画符状态滚动缓存食指尖，起笔播种用（画符中不需要）
+		if state != State.DRAWING:
+			_push_preroll(index_tip)
+	# latch 只在观察到"确实松开了"后解除，施放后捏着不放不会自动重画
+	if pose != PoseClassifier.Pose.PINCH:
+		_pinch_latch = false
 
 	# 法力回复（GDD §4.4：聚气状态 8/s，其余 2/s）
 	var regen := MANA_REGEN_IDLE if state != State.CHARGE else MANA_REGEN_CHARGE
@@ -119,38 +126,31 @@ func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, 
 
 	match state:
 		State.IDLE:
-			if pose == PoseClassifier.Pose.DRAWING:
-				_enter_charge(false)
-			elif pose == PoseClassifier.Pose.FIST:
-				_enter_charge(true)
-		State.CHARGE:
-			if pose == PoseClassifier.Pose.DRAWING:
-				_push_tip(index_tip)
-				# 指尖动起来即开始画符：速度快或滑窗内位移大都算起笔
-				if _tip_speed() > STROKE_START_SPEED or _window_disp() > STROKE_START_DISP:
+			if pose == PoseClassifier.Pose.PINCH:
+				if not _pinch_latch:
 					_enter_drawing(index_tip)
-			elif pose == PoseClassifier.Pose.PALM and _charge_by_fist:
+			elif pose == PoseClassifier.Pose.FIST:
+				_enter_charge()
+		State.CHARGE:
+			if pose == PoseClassifier.Pose.PINCH:
+				_enter_drawing(index_tip)
+			elif pose == PoseClassifier.Pose.PALM:
 				_quick_shot()
-			else:
-				_samples.clear()
 		State.DRAWING:
-			_update_drawing(pose, index_tip)
+			_update_drawing(pose, index_tip, delta)
 		State.COOLDOWN:
 			_cooldown_left -= delta
 			if _cooldown_left <= 0.0:
 				if pose == PoseClassifier.Pose.FIST:
-					_enter_charge(true)
+					_enter_charge()
 				else:
 					_go_idle()
 
 
-func _enter_charge(by_fist: bool) -> void:
+func _enter_charge() -> void:
 	state = State.CHARGE
-	_charge_by_fist = by_fist
 	trajectory.clear()
 	trajectory_start_ms = -1
-	_samples.clear()
-	_stop_ms = 0.0
 	charge_started.emit()
 	state_changed.emit("CHARGE")
 
@@ -174,79 +174,63 @@ func _enter_drawing(p: Vector2) -> void:
 	state = State.DRAWING
 	trajectory.clear()
 	trajectory.append(p)
+	# 预滚播种：从当前指尖往回收集时间连续的预滚轨迹，补偿捏合去抖（5/7 帧表决）
+	# 的起笔切头。间隙超过瞬移阈值即断开——张掌/握拳期的陈旧指尖位置不连进符文
+	var prev := p
+	var i := _preroll.size() - 1
+	while i >= 0:
+		var q: Vector2 = _preroll[i][1]
+		if (prev - q).length() >= SAMPLE_TELEPORT:
+			break
+		trajectory.push_front(q)
+		prev = q
+		i -= 1
 	trajectory_start_ms = Time.get_ticks_msec()
-	_fist_ms = 0.0
-	_stop_ms = 0.0
-	_peak_speed = _tip_speed()
+	_open_ms = 0.0
+	_draw_time = 0.0
 	drawing_updated.emit(_trajectory_public())
 	state_changed.emit("DRAWING")
 
 
-func _update_drawing(pose: int, index_tip: Vector2) -> void:
-	var now := Time.get_ticks_msec()
+func _update_drawing(pose: int, index_tip: Vector2, delta: float) -> void:
 	# 画符超时（GDD：轨迹窗口 2.5s）——超时视为收笔，直接拿现有轨迹进识别
-	if trajectory_start_ms >= 0 and now - trajectory_start_ms > DRAW_TIMEOUT * 1000.0:
+	_draw_time += delta
+	if _draw_time > DRAW_TIMEOUT:
 		_release()
 		return
 
+	if pose == PoseClassifier.Pose.PINCH:
+		_open_ms = 0.0
+		_push_tip(index_tip)
+		return
 	if pose == PoseClassifier.Pose.PALM:
+		_release()  # 张掌 = 立即收笔（保留旧即时路径）
+		return
+	# 非捏合（松开捏合/握拳/画符姿过渡帧）：暂停采样——松开瞬间食指会卷动，
+	# 采进来的点是污染。短暂闪断 <PINCH_RELEASE_CONFIRM_S 当伪影吞掉；
+	# 持续松开 = 抬笔收笔（握拳收笔的旧肌肉记忆由此继续可用）
+	_open_ms += delta
+	if _open_ms >= PINCH_RELEASE_CONFIRM_S:
 		_release()
-		return
-	if pose == PoseClassifier.Pose.FIST:
-		# 握拳 = 确认收笔（主路径）：保持 FIST_CONFIRM_S 即拿现有轨迹识别施放。
-		# 零星误判帧在多数表决处已被滤掉，到不了这里；轨迹太短时 _release 内有兜底
-		_fist_ms += get_process_delta_time()
-		if _fist_ms > FIST_CONFIRM_S:
-			_release()
-		return
-	# DRAWING / NONE 都持续采样——画符姿势在大幅挥动中极易掉线（比值特征
-	# 随手朝向翻转），掉线帧里手仍在镜头中，指尖位置依然可信
-	_fist_ms = 0.0
-	_push_tip(index_tip)
-	var speed := _tip_speed()
-	# 峰值速度随帧轻微衰减：匀速画时峰值≈当前速度，真减速时阈值随衰减下压，
-	# 收笔判定不会拖太久
-	_peak_speed = maxf(_peak_speed * pow(0.98, get_process_delta_time() * 60.0), speed)
-	var last: Vector2 = trajectory[trajectory.size() - 1] if trajectory.size() > 0 else Vector2(INF, INF)
-	# 采样间隔：距离 > 0.004 才记录，避免静止时堆点
-	if (index_tip - last).length() > 0.004:
-		# 瞬移保护：单帧跳变 >12% 画面必为姿势切换伪影（如张掌确认期指尖跳到掌心），
-		# 真实画符动作不可能一帧挪 12% 屏幕
-		if (index_tip - last).length() < 0.12:
-			trajectory.append(index_tip)
-			drawing_updated.emit(_trajectory_public())
-	# 收笔：不要求完全停住（人手必抖），速度掉到本次画符峰值的 1/4 以下
-	# 并保持 STROKE_STOP_S 即收笔；绝对兜底远低于正常挥动速度
-	if trajectory.size() >= 8 and speed < maxf(STROKE_STOP_SPEED, _peak_speed * STROKE_STOP_FRACTION):
-		_stop_ms += get_process_delta_time()
-		if _stop_ms >= STROKE_STOP_S:
-			_release()
-	else:
-		_stop_ms = 0.0
 
 
-## 指尖测速滑窗：先裁剪到最近 SPEED_WINDOW_MS，位移过小不记（滤滤波残余抖动）
+## 画符采样：间距过小不记（滤滤波残余抖动+静止堆点）；
+## 单帧跳变过大必为伪影（如张掌确认期指尖跳到掌心），丢弃
 func _push_tip(tip: Vector2) -> void:
+	if trajectory.size() > 0:
+		var d := (tip - trajectory[trajectory.size() - 1]).length()
+		if d < SAMPLE_MIN_DIST or d >= SAMPLE_TELEPORT:
+			return
+	trajectory.append(tip)
+	drawing_updated.emit(_trajectory_public())
+
+
+## 起笔预滚环：保留最近 PREROLL_MS 的食指尖位置（每帧原始记录，播种时再过滤）
+func _push_preroll(tip: Vector2) -> void:
 	var now := Time.get_ticks_msec()
-	while _samples.size() > 0 and now - int(_samples[0][0]) > SPEED_WINDOW_MS:
-		_samples.pop_front()
-	if _samples.size() > 0 and (tip - _samples[_samples.size() - 1][1]).length() < 0.002:
-		return
-	_samples.append([now, tip])
-
-
-func _tip_speed() -> float:
-	if _samples.size() < 2:
-		return 0.0
-	var dt := maxf(1.0, float(_samples[_samples.size() - 1][0] - _samples[0][0]))
-	var dist := float((_samples[_samples.size() - 1][1] - _samples[0][1]).length())
-	return dist / (dt / 1000.0)
-
-
-func _window_disp() -> float:
-	if _samples.size() < 2:
-		return 0.0
-	return float((_samples[_samples.size() - 1][1] - _samples[0][1]).length())
+	_preroll.append([now, tip])
+	while _preroll.size() > 0 and now - int(_preroll[0][0]) > PREROLL_MS:
+		_preroll.pop_front()
 
 
 ## 画符轨迹的包围盒中心（0~1 归一化）：弹道从"画的图形"中心出，
@@ -293,6 +277,7 @@ func _release() -> void:
 	state = State.COOLDOWN
 	_cooldown_left = COOLDOWN_TIME
 	trajectory.clear()
+	_pinch_latch = true
 	state_changed.emit("COOLDOWN")
 
 
@@ -305,6 +290,7 @@ func _fizzle(reason: String) -> void:
 	fizzle.emit(reason)
 	state = State.COOLDOWN
 	_cooldown_left = 0.3  # 失败惩罚极短，鼓励立刻重试（GDD §3.2 宽容设计）
+	_pinch_latch = true
 	state_changed.emit("FIZZLE→COOLDOWN")
 
 
