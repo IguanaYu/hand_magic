@@ -523,11 +523,17 @@ func _process(delta: float) -> void:
 	var hand_present := false
 	var index_tip := Vector2.ZERO
 	var anchor := Vector2(0.5, 0.5)
+	# 同帧原始判定/捏距：仅在真的分类了手部关键点时才有效（无手时分类器已被
+	# reset，读出来是脏值）；缺省 -1/-1.0 让 FSM 的采样门/再装填退回旧行为
+	var raw_pose := -1
+	var raw_pinch_dist := -1.0
 
 	if _latest_hands.size() > 0:
 		var hand: Dictionary = _latest_hands[0]
 		hand_present = true
 		pose = pose_classifier.classify(hand.get("points", []))
+		raw_pose = pose_classifier.last_raw_pose
+		raw_pinch_dist = pose_classifier.last_pinch_dist
 		index_tip = hand.get("index_tip", Vector2.ZERO)
 		anchor = hand.get("palm", Vector2(0.5, 0.5))
 	else:
@@ -559,7 +565,7 @@ func _process(delta: float) -> void:
 			index_tip = m
 			anchor = m
 
-	fsm.update(pose, hand_present, index_tip, anchor, delta)
+	fsm.update(pose, hand_present, index_tip, anchor, delta, raw_pose, raw_pinch_dist)
 
 	# 渲染层同步
 	skeleton.set_hands(_latest_hands)
@@ -599,11 +605,16 @@ func _process_3d(delta: float) -> void:
 	var hand_present := false
 	var index_tip := Vector2.ZERO
 	var anchor := Vector2(0.5, 0.5)
+	# 同帧原始判定/捏距：仅在真的分类了手部关键点时才有效（2D 主循环同构）
+	var raw_pose := -1
+	var raw_pinch_dist := -1.0
 
 	if _latest_hands.size() > 0:
 		var hand: Dictionary = _latest_hands[0]
 		hand_present = true
 		pose = pose_classifier.classify(hand.get("points", []))
+		raw_pose = pose_classifier.last_raw_pose
+		raw_pinch_dist = pose_classifier.last_pinch_dist
 		index_tip = hand.get("index_tip", Vector2.ZERO)
 		anchor = hand.get("palm", Vector2(0.5, 0.5))
 	else:
@@ -637,16 +648,17 @@ func _process_3d(delta: float) -> void:
 			index_tip = m
 			anchor = m
 
-	fsm.update(pose, hand_present, index_tip, anchor, delta)
+	fsm.update(pose, hand_present, index_tip, anchor, delta, raw_pose, raw_pinch_dist)
 	if MANA_FREE:
 		fsm.mana = GestureFSM.MANA_MAX  # 调试期法力免费
-	# latch 封锁期的可见反馈：施放后捏着不放/识别卡'捏合'时提示怎么解锁
-	#（真机事故：识别冻结在'捏合'+latch 曾完全静默封锁画符）
+	# latch/再装填封锁期的可见反馈：施放后捏着不放/识别卡'捏合'/握拳收笔后还没
+	# 张开手时，提示怎么解锁（延续"封锁不可静默"原则）
 	var latch_blocked: bool = fsm.state == GestureFSM.State.IDLE \
-		and pose == PoseClassifier.Pose.PINCH and fsm.latch_active()
+		and pose == PoseClassifier.Pose.PINCH \
+		and (fsm.latch_active() or not fsm.pinch_armed())
 	if latch_blocked and not _latch_hinted:
 		_latch_hinted = true
-		hud.set_message("先松开拇指食指，再重新捏合画符")
+		hud.set_message("先松开拇指食指，再重新捏合画符" if fsm.latch_active() else "先完全张开手，再捏合画符")
 	if not latch_blocked:
 		_latch_hinted = false
 	skeleton.set_hands(_latest_hands)

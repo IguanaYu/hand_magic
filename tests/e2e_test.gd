@@ -89,8 +89,11 @@ func _rune_phase(rune_id: String, anchor: Vector2, pts: Array) -> void:
 				casts_before = main.fsm.cast_count
 				_next_stage()
 		2:
+			# 冷却期持续喂张掌，等回 IDLE 再进下一相位：真实玩家收笔后手会保持
+			# 张开一会儿，起笔再装填（拇指食指分开≥0.1s）在这段里完成——施放帧
+			# 立即跳相位会让下一相位的捏合被再装填闸门拦住
 			_feed(_make_palm_at(anchor))
-			if main.fsm.state == GestureFSM.State.COOLDOWN or stage_t > 2.5:
+			if main.fsm.state == GestureFSM.State.IDLE or stage_t > 3.0:
 				_assert_cast(rune_id)
 				if rune_id == "wind_blade":
 					_next_stage()

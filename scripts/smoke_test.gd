@@ -384,6 +384,67 @@ static func _test_fsm() -> Array:
 		f += 1
 	print("%s fsm.quick: 拳→张掌快速火弹保留" % ["[PASS]" if quick_ok else "[FAIL]"])
 
+	# --- 收笔拖尾：握拳收笔时稳定姿势滞后（3 票 ~100ms 仍报 PINCH）、原始判定已离开 →
+	# 卷动的指尖不再入轨（真机事故：握拳让指头向下，符文末尾多拖一笔）---
+	var counters6 := {"casts": 0}
+	var fsm6 := GestureFSM.new()
+	fsm6.cast_performed.connect(func(_s, _a, _sc): counters6.casts += 1)
+	var pts6 := _make_circle(Vector2(0.35, 0.45), 0.12)
+	fsm6.update(PoseClassifier.Pose.PINCH, true, pts6[0], anchor, dt, PoseClassifier.Pose.PINCH, 0.10)
+	for i in range(1, pts6.size()):
+		fsm6.update(PoseClassifier.Pose.PINCH, true, pts6[i], anchor, dt, PoseClassifier.Pose.PINCH, 0.10)
+	var n6: int = fsm6.trajectory.size()
+	# 开始握拳：稳定姿势仍在去抖窗口内报 PINCH，原始已判 FIST，指尖向下卷动
+	for i in range(3):
+		fsm6.update(PoseClassifier.Pose.PINCH, true, Vector2(pts6[39].x, pts6[39].y + 0.03 * (i + 1)), anchor, dt, PoseClassifier.Pose.FIST, 0.40)
+	var tail_ok: bool = fsm6.trajectory.size() == n6
+	# 稳定姿势离开捏合 → 0.12s 确认收笔 → 施放（轨迹无拖尾仍可识别）
+	for i in range(5):
+		fsm6.update(PoseClassifier.Pose.FIST, true, Vector2(pts6[39].x, 0.72), anchor, dt, PoseClassifier.Pose.FIST, 0.40)
+	tail_ok = tail_ok and counters6.casts == 1
+	# 旧行为锚：不提供原始姿势（鼠标兜底/旧调用方）时照旧采样，闸门接线正确性由对比锁定
+	var fsm6b := GestureFSM.new()
+	fsm6b.update(PoseClassifier.Pose.PINCH, true, pts6[0], anchor, dt)
+	for i in range(1, pts6.size()):
+		fsm6b.update(PoseClassifier.Pose.PINCH, true, pts6[i], anchor, dt)
+	var n6b: int = fsm6b.trajectory.size()
+	for i in range(3):
+		fsm6b.update(PoseClassifier.Pose.PINCH, true, Vector2(pts6[39].x, pts6[39].y + 0.03 * (i + 1)), anchor, dt)
+	tail_ok = tail_ok and fsm6b.trajectory.size() > n6b
+	if tail_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.tail: 握拳收笔卷指不入轨(%d→%d)，旧行为锚=%s" % [
+		"[PASS]" if tail_ok else "[FAIL]", n6, fsm6.trajectory.size(), fsm6b.trajectory.size() > n6b])
+
+	# --- 再装填：握拳收笔后拇指食指从未明确分开，展开途中表决把瞬态误判成稳定 PINCH
+	#（假捏合窗口）也不误起笔；完全张开后恢复（真机事故：拳→张掌莫名开始画符）---
+	var counters7 := {"casts": 0}
+	var fsm7 := GestureFSM.new()
+	fsm7.cast_performed.connect(func(_s, _a, _sc): counters7.casts += 1)
+	var pts7 := _make_circle(Vector2(0.65, 0.45), 0.12)
+	fsm7.update(PoseClassifier.Pose.PINCH, true, pts7[0], anchor, dt, PoseClassifier.Pose.PINCH, 0.10)
+	for i in range(1, pts7.size()):
+		fsm7.update(PoseClassifier.Pose.PINCH, true, pts7[i], anchor, dt, PoseClassifier.Pose.PINCH, 0.10)
+	for i in range(5):  # 握拳收笔（0.132s ≥ 0.12s）→ 施放，捏距 0.45 从未拉开
+		fsm7.update(PoseClassifier.Pose.FIST, true, pts7[39], anchor, dt, PoseClassifier.Pose.FIST, 0.45)
+	for i in range(30):  # 1.0s > 0.8s 冷却：握拳保持（模拟收笔后手停在拳上）
+		fsm7.update(PoseClassifier.Pose.NONE, true, pts7[0], anchor, dt, PoseClassifier.Pose.NONE, 0.45)
+	for i in range(6):  # 展开途中假捏合窗口：稳定姿势被表决误判 PINCH，捏距仍小
+		fsm7.update(PoseClassifier.Pose.PINCH, true, pts7[0], anchor, dt, PoseClassifier.Pose.PINCH, 0.30)
+	var false_ok: bool = fsm7.state == GestureFSM.State.IDLE and counters7.casts == 1
+	for i in range(5):  # 完全张开：捏距 0.8 持续 0.165s > 0.10s → 再装填完成
+		fsm7.update(PoseClassifier.Pose.PALM, true, pts7[0], anchor, dt, PoseClassifier.Pose.PALM, 0.80)
+	fsm7.update(PoseClassifier.Pose.PINCH, true, pts7[0], anchor, dt, PoseClassifier.Pose.PINCH, 0.10)
+	var rearm_ok: bool = false_ok and fsm7.state == GestureFSM.State.DRAWING
+	if rearm_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s fsm.rearm: 拳→张掌假捏合被拦=%s，张开后起笔恢复=%s" % [
+		"[PASS]" if rearm_ok else "[FAIL]", false_ok, fsm7.state == GestureFSM.State.DRAWING])
+
 	return [p, f]
 
 

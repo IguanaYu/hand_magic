@@ -10,9 +10,17 @@ extends Node
 ## ——旧的握拳收笔肌肉记忆仍然可用。
 ## 起笔预滚：捏合检测有去抖滞后（5/7 帧表决），玩家捏上的瞬间手就开始动，
 ## IDLE/CHARGE 期间滚动缓存最近 PREROLL_MS 的食指尖，起笔时先播种进轨迹防切头。
+## 采样以原始姿势为准：稳定姿势离开捏合要攒 3 票（~100ms），握拳收笔时卷动的
+## 指尖会在滞后期被持续采样，给符文拖出向下一笔——原始姿势一旦离开捏合（防拳
+## guard 的食指比值最先失效）即刻停采。
 ## latch：施放/失败后仍捏着不松不自动重画，松开一次后恢复（起笔只认上升沿）；
 ## 带 PINCH_LATCH_S 自愈过期——识别若卡死在'捏合'（真机事故：稳定姿势冻结 24s），
 ## 封锁最多持续 2s，之后恢复可见行为（轨迹/超时施放）而非永久静默。
+## 再装填（break-before-make）：收笔后必须先观察到拇指食指明确分开（原始捏距
+## 连续超退出阈值 PINCH_REARM_S）才允许下一次捏合起笔。拳→张掌的展开过程会路过
+## "距离小+食指伸出"的假捏合窗口（表决误判 PINCH → 误起笔），而拳内距离从未拉开
+## → 再装填不满足 → 假捏合被拦截；完全张开后重新装填，正常节奏无感（冷却期内
+## 张掌的手早已完成装填）。
 ## 任意状态：张掌保持 500ms → IDLE；丢手 0.6s → IDLE。
 
 
@@ -49,6 +57,8 @@ const QUICK_COST := 8.0   # 掌心火弹法力（M0.5 快速施法）
 const QUICK_COOLDOWN := 0.5
 const DRAW_TIMEOUT := 2.5
 const PINCH_RELEASE_CONFIRM_S := 0.12  # 画符中松开捏合持续此时长 = 确认收笔施放
+const PINCH_REARM_S := 0.10            # 起笔再装填：收笔后拇指食指明确分开（原始捏距
+                                       # >退出阈值）持续此时长，才允许下一次捏合起笔
 const PREROLL_MS := 200                # 起笔预滚缓冲：补偿姿势去抖（5/7 帧表决）的检测滞后
 const PINCH_LATCH_S := 2.0             # latch 自愈过期：覆盖冷却 0.8s 后仍不误触发，且识别
                                        # 卡死在'捏合'时封锁最多 2s（静默不可接受）
@@ -81,6 +91,10 @@ var _open_ms := 0.0           # 画符中非捏合（松开）持续时长
 var _draw_time := 0.0         # 本次画符累计时长（超时用；累积 delta 而非墙钟，测试可快进）
 var _pinch_latch := false     # 施放后仍捏着不松 → 不自动重画
 var _latch_t := 0.0           # latch 已持续时长（自愈过期用）
+var _pinch_armed := true      # 起笔再装填锁存：收笔后须先明确分开拇指食指才回 true。
+                              # 必须锁存：装填若随实时捏距清零，捏合期间计时永远归零
+                              # → 起笔被永久封锁；只在下一次收笔时卸下
+var _sep_ms := 0.0            # 未装填时拇指食指分开（原始捏距>退出阈值）累计时长
 
 
 func reset() -> void:
@@ -95,12 +109,16 @@ func reset() -> void:
 	_draw_time = 0.0
 	_pinch_latch = false
 	_latch_t = 0.0
+	_pinch_armed = true  # 重置=丢手/张掌取消，手必然分开过，直接装填
+	_sep_ms = 0.0
 	state_changed.emit("IDLE")
 
 
 ## 每帧驱动。pose: PoseClassifier.Pose；hand_present: 是否检测到手；
 ## index_tip / anchor: 归一化坐标（已镜像、已平滑）
-func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, delta: float) -> void:
+## raw_pose / raw_pinch_dist: 同帧分类器的原始判定与捏距（可选，缺省 -1/-1.0 =
+## 调用方无手部数据，采样与再装填退回旧行为——鼠标兜底/旧测试即此路径）
+func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, delta: float, raw_pose := -1, raw_pinch_dist := -1.0) -> void:
 	current_anchor = anchor
 	if not hand_present:
 		_no_hand_ms += delta
@@ -111,6 +129,20 @@ func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, 
 		# 预滚：非画符状态滚动缓存食指尖，起笔播种用（画符中不需要）
 		if state != State.DRAWING:
 			_push_preroll(index_tip)
+	# 再装填（break-before-make）：收笔卸下装填，观察到拇指食指明确分开（原始捏距
+	# 连续超退出阈值 PINCH_REARM_S）后重新装填。拳→张掌的展开过程会路过"距离小+
+	# 食指伸出"的假捏合窗口（表决误判 PINCH → 误起笔），而拳内距离从未拉开 →
+	# 假捏合被拦截；完全张开后重新装填，冷却期内张掌的手早已完成，正常节奏无感。
+	# 无原始捏距（无手数据/鼠标兜底）视作已分开，闸门不生效
+	if raw_pinch_dist < 0.0:
+		_pinch_armed = true
+	elif not _pinch_armed:
+		if raw_pinch_dist > PoseClassifier.PINCH_EXIT_RATIO:
+			_sep_ms += delta
+			if _sep_ms >= PINCH_REARM_S:
+				_pinch_armed = true
+		else:
+			_sep_ms = 0.0
 	# latch 只在观察到"确实松开了"后解除，施放后捏着不放不会自动重画；
 	# 自愈过期兜底：识别若冻结在'捏合'，封锁最多 PINCH_LATCH_S 后自动解除
 	if pose != PoseClassifier.Pose.PINCH:
@@ -141,17 +173,17 @@ func update(pose: int, hand_present: bool, index_tip: Vector2, anchor: Vector2, 
 	match state:
 		State.IDLE:
 			if pose == PoseClassifier.Pose.PINCH:
-				if not _pinch_latch:
+				if not _pinch_latch and _pinch_armed:
 					_enter_drawing(index_tip)
 			elif pose == PoseClassifier.Pose.FIST:
 				_enter_charge()
 		State.CHARGE:
-			if pose == PoseClassifier.Pose.PINCH:
+			if pose == PoseClassifier.Pose.PINCH and _pinch_armed:
 				_enter_drawing(index_tip)
 			elif pose == PoseClassifier.Pose.PALM:
 				_quick_shot()
 		State.DRAWING:
-			_update_drawing(pose, index_tip, delta)
+			_update_drawing(pose, index_tip, delta, raw_pose)
 		State.COOLDOWN:
 			_cooldown_left -= delta
 			if _cooldown_left <= 0.0:
@@ -206,7 +238,7 @@ func _enter_drawing(p: Vector2) -> void:
 	state_changed.emit("DRAWING")
 
 
-func _update_drawing(pose: int, index_tip: Vector2, delta: float) -> void:
+func _update_drawing(pose: int, index_tip: Vector2, delta: float, raw_pose := -1) -> void:
 	# 画符超时（GDD：轨迹窗口 2.5s）——超时视为收笔，直接拿现有轨迹进识别
 	_draw_time += delta
 	if _draw_time > DRAW_TIMEOUT:
@@ -215,7 +247,11 @@ func _update_drawing(pose: int, index_tip: Vector2, delta: float) -> void:
 
 	if pose == PoseClassifier.Pose.PINCH:
 		_open_ms = 0.0
-		_push_tip(index_tip)
+		# 采样以原始姿势为准：稳定姿势离开捏合要攒 3 票（~100ms 滞后），握拳收笔
+		# 时卷动的指尖在滞后期仍会被采进轨迹，拖出向下一笔。原始判定离开捏合即刻
+		# 停采（防拳 guard 的食指比值最先失效，是卷指最早的几何信号）
+		if raw_pose == -1 or raw_pose == PoseClassifier.Pose.PINCH:
+			_push_tip(index_tip)
 		return
 	if pose == PoseClassifier.Pose.PALM:
 		_release()  # 张掌 = 立即收笔（保留旧即时路径）
@@ -292,6 +328,8 @@ func _release() -> void:
 	_cooldown_left = COOLDOWN_TIME
 	trajectory.clear()
 	_pinch_latch = true
+	_pinch_armed = false  # 收笔即卸下装填：下一次起笔前须先明确分开拇指食指
+	_sep_ms = 0.0
 	state_changed.emit("COOLDOWN")
 
 
@@ -305,6 +343,8 @@ func _fizzle(reason: String) -> void:
 	state = State.COOLDOWN
 	_cooldown_left = 0.3  # 失败惩罚极短，鼓励立刻重试（GDD §3.2 宽容设计）
 	_pinch_latch = true
+	_pinch_armed = false  # 同 _release：收笔后先分开再起笔
+	_sep_ms = 0.0
 	state_changed.emit("FIZZLE→COOLDOWN")
 
 
@@ -333,3 +373,8 @@ func state_name() -> String:
 ## latch 是否仍在封锁起笔（HUD 提示"先松开捏合"用）
 func latch_active() -> bool:
 	return _pinch_latch
+
+
+## 起笔再装填是否完成（HUD 提示"先张开手再捏合"用；无原始捏距时恒为 true）
+func pinch_armed() -> bool:
+	return _pinch_armed
