@@ -1,0 +1,20 @@
+===== SMOKE =====
+   at: cleanup (core/object/object.cpp:2641)
+ERROR: 3 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)
+===== E2E =====
+[PASS] 性能: 识别单次耗时 10.94ms (阈值12ms)
+-------- E2E 结果: 40 PASS / 0 FAIL --------
+===== ROBUST =====
+
+结论: 全部噪声等级 ≥90% 达标
+===== GAME =====
+[PASS] 重开恢复状态
+-------- GAME 测试: 9 PASS / 0 FAIL --------
+===== BATTLE3D =====
+[PASS] 录制：关闭恢复不暂停+战场解冻
+-------- battle3d 测试: 42 PASS / 0 FAIL --------
+===== MARIO =====
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2641)
+===== ALL DONE =====
