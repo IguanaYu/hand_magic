@@ -89,7 +89,7 @@ func _run() -> void:
 	# 冻结单位保持原地当障碍物，对方绕开
 	var fz: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
 	fz.global_position = Vector3(6.0, 0.0, -20.0)
-	fz.speed = 0.0  # 星际版冻结=减速非定身，速度归零排除自走位移，单测分离不推冻结
+	fz.speed = 0.0  # 冻结=定身后本就不移动；speed 归零仅排除其他位移源，单测分离行为本身
 	fz.apply_freeze(3.0)
 	var wk: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
 	wk.global_position = Vector3(6.6, 0.0, -20.0)
@@ -154,6 +154,66 @@ func _run() -> void:
 	battlefield.spell_caster._cast_ice_field(Vector3(0.0, 0.0, -15.0))
 	_check("冰域：6m 内敌人被冻结（frozen=%.1f）" % ice_e.frozen_t, ice_e.frozen_t > 0.0)
 	ice_e.take_damage(999.0)
+
+	# --- 火球追踪：落点吸附（修"火球老空"，参照=落点保留画哪打哪） ---
+	var hm: EnemyUnit3D = battlefield.spawn_enemy("marine")
+	hm.global_position = Vector3(4.0, 0.0, -13.0)  # 落点旁 4m > AoE 2.5m：吸附追踪才打得到
+	hm.speed = 0.0
+	battlefield.spell_caster._spawn_fireball({"enemy": null, "point": Vector3(0.0, 0.0, -13.0)})
+	await get_tree().create_timer(1.5).timeout  # 飞行 ~1.1s + 起爆余量
+	_check("火球追踪：吸附落点 6m 内最近敌（4m 侧敌被炸死）",
+		not is_instance_valid(hm) or not hm.alive)
+
+	# --- 火球追踪：飞行中重指向，横移目标不空炸 ---
+	var mv: EnemyUnit3D = battlefield.spawn_enemy("marine")
+	mv.global_position = Vector3(0.0, 0.0, -13.0)
+	mv.speed = 3.0
+	mv.set_waypoint(Vector3(12.0, 0.0, -13.0))  # 飞行 ~1.1s 内横移 ~3.3m，固定落点必空
+	battlefield.spell_caster._spawn_fireball({"enemy": null, "point": Vector3(0.0, 0.0, -13.0)})
+	await get_tree().create_timer(1.5).timeout
+	_check("火球追踪：横移目标仍命中",
+		not is_instance_valid(mv) or not mv.alive)
+
+	# --- 火球追踪：吸附圈外不锁定（画哪打哪的瞄准意义保留） ---
+	var far_e: EnemyUnit3D = battlefield.spawn_enemy("marine")
+	far_e.global_position = Vector3(12.0, 0.0, -13.0)  # 落点 12m > 吸附 6m
+	far_e.speed = 0.0
+	battlefield.spell_caster._spawn_fireball({"enemy": null, "point": Vector3(0.0, 0.0, -13.0)})
+	await get_tree().create_timer(1.5).timeout
+	_check("火球追踪：6m 外不吸附，按落点引爆",
+		is_instance_valid(far_e) and far_e.alive)
+	far_e.take_damage(999.0)
+
+	# --- 冰冻=定身：冻结中纹丝不动（旧为减速 0.45 继续走） ---
+	var fz2: EnemyUnit3D = battlefield.spawn_enemy("marine")
+	fz2.global_position = Vector3(-4.0, 0.0, -16.0)
+	fz2.speed = 3.0
+	fz2.set_waypoint(Vector3(6.0, 0.0, -16.0))
+	await get_tree().create_timer(0.2).timeout
+	var walked: bool = fz2.global_position.x > -4.0  # 前置：确认冻结前在走
+	var pos0: Vector3 = fz2.global_position
+	fz2.apply_freeze(1.5)
+	await get_tree().create_timer(0.5).timeout
+	_check("冰冻定身：冻结中不移动（先走=%s，Δ=%.3f）" % [walked, fz2.global_position.distance_to(pos0)],
+		walked and fz2.alive and fz2.global_position.distance_to(pos0) < 0.05)
+	fz2.take_damage(999.0)
+
+	# --- 冰冻=定身：FIRE 态敌人冻结后停止射击 ---
+	var fz3: EnemyUnit3D = battlefield.spawn_enemy("marine", false)
+	fz3.global_position = Vector3(0.0, 0.0, battlefield.PLAYER_POS.z - 9.0)
+	fz3.speed = 60.0
+	await get_tree().create_timer(0.9).timeout  # 冲到停火线 → HALT 0.4s → FIRE
+	var firing: bool = fz3.state == EnemyUnit3D.State.FIRE
+	fz3.apply_freeze(2.0)
+	fz3._fire_cd = 0.05  # 冻结中冷却到了也不该射
+	await get_tree().create_timer(0.2).timeout
+	for b in battlefield.bullet_layer.get_children():
+		b.queue_free()
+	var n_b: int = battlefield.bullet_layer.get_child_count()
+	await get_tree().create_timer(0.6).timeout
+	_check("冰冻定身：冻结中停止射击（FIRE 态=%s，弹 %d→%d）" % [firing, n_b, battlefield.bullet_layer.get_child_count()],
+		firing and fz3.alive and battlefield.bullet_layer.get_child_count() == 0)
+	fz3.take_damage(999.0)
 
 	# --- 风刃：近身敌人被击退 ---
 	var wind_e: EnemyUnit3D = battlefield.spawn_enemy("marauder")

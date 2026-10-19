@@ -118,7 +118,7 @@ func _run() -> void:
 	var d_b_w := bs.apply_spell("wind", 18.0, Vector3.ZERO)
 	_check("库巴风刃 ×0.2：打不动（实伤 3.6）", is_equal_approx(d_b_w, 3.6))
 	var d_b_i0 := bs.apply_spell("ice", 10.0, Vector3.ZERO)
-	_check("库巴冰：狂暴前可减速受伤", d_b_i0 > 0.0 and bs.frozen_t > 0.0)
+	_check("库巴冰：狂暴前可冻结受伤", d_b_i0 > 0.0 and bs.frozen_t > 0.0)
 	bs.frozen_t = 0.0
 	bs.take_damage(290.0)  # 总伤 20+3.6+10+290 = 323.6 <600；再补到半血以下
 	bs.take_damage(30.0)   # 353.6 → 246.4 < 300 半血

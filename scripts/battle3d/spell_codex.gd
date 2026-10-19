@@ -46,7 +46,7 @@ static func entries() -> Array[Dictionary]:
 		{
 			"id": "ice_field", "name": "冰霜领域", "key": KEY_3, "key_label": "3",
 			"cost": GestureFSM.SPELL_COST["ice_field"], "points": DISPLAY_POINTS["triangle"],
-			"how": "画一个三角形", "desc": "范围减速并持续冻伤",
+			"how": "画一个三角形", "desc": "范围冰冻定身并冻伤",
 		},
 		{
 			"id": "wind_blade", "name": "风刃", "key": KEY_4, "key_label": "4",

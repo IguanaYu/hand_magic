@@ -6,6 +6,9 @@ extends Node3D
 const FIREBALL_DMG := 40.0
 const FIREBALL_RADIUS := 2.5
 const FIREBALL_SPEED := 18.0
+const FIREBALL_SNAP := 6.0  # 落点吸附半径：落点附近最近的敌人会被锁定追踪。
+                             # 参照=落点（保留"画哪打哪"的瞄准意义）；要改成
+                             # "全场离玩家最近"把 _snap_enemy 的参照换成 PLAYER_POS
 const LIGHTNING_DMG := 25.0
 const LIGHTNING_TARGETS := 3
 const ICE_RADIUS := 6.0
@@ -112,10 +115,35 @@ func _spawn_fireball(aim: Dictionary) -> void:
 	battlefield.play_sfx("cast_fire", Vector3.INF, -4.0)
 	var fx := FireballProjectile.new()
 	fx.caster = self
-	fx.target = aim["point"]
+	# 锁定优先级：射线直击 > 落点吸附圈内最近敌人 > 无锁定（照旧飞地面落点炸）
+	var lock: EnemyUnit3D = aim["enemy"]
+	if lock == null:
+		lock = _snap_enemy(aim["point"], FIREBALL_SNAP)
+	if lock != null:
+		fx.homing_target = lock
+		fx.target = lock.aim_center()
+	else:
+		fx.target = aim["point"]
 	var launch := battlefield.camera.global_position + battlefield.camera.global_transform.basis.z * 1.2 - Vector3.UP * 0.3
 	fx.position = launch
 	battlefield.fx_layer.add_child(fx)
+
+
+## 落点吸附：radius 内（XZ 距离）最近的活敌。跳过隐身幽灵——与 _ray_hit_enemy
+## 同规则，火系锁不到看不见的目标（幽灵对火的闪避克制保留）
+func _snap_enemy(point: Vector3, radius: float) -> EnemyUnit3D:
+	var best: EnemyUnit3D = null
+	var best_d := radius
+	for e in battlefield.enemies:
+		if not e.alive:
+			continue
+		if "is_stealthed" in e and e.is_stealthed():
+			continue
+		var d: float = Vector2(e.global_position.x - point.x, e.global_position.z - point.z).length()
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
 
 
 ## 火球 AoE 伤害判定（爆炸点 r2.5m 内敌人 40 伤；马里奥单位走元素克制表）
@@ -216,6 +244,7 @@ func _cast_quick_shot() -> void:
 	battlefield.play_sfx("bolt", Vector3.INF, -4.0)
 	var fx := FireballProjectile.new()
 	fx.caster = self
+	fx.homing_target = nearest
 	fx.target = nearest.aim_center()
 	fx.speed = 40.0
 	fx.radius = 0.18
@@ -238,11 +267,14 @@ func _nearest_enemies(point: Vector3, n: int) -> Array:
 
 # ---------------- 内嵌特效节点 ----------------
 
-## 火球投射物：飞到目标点爆炸（AoE / 单体两用）
+## 火球投射物：飞到目标点爆炸（AoE / 单体两用）。
+## homing_target 非空=锁定追踪：每帧重指向目标中心（敌人移动不空炸），
+## 目标中途死亡立即空中补爆（AoE 仍溅射周边，这一发不浪费）
 class FireballProjectile:
 	extends Node3D
 	var caster: SpellCaster3D
 	var target := Vector3.ZERO
+	var homing_target: EnemyUnit3D = null
 	var speed := FIREBALL_SPEED
 	var radius := 0.28
 	var damage := FIREBALL_DMG
@@ -267,6 +299,11 @@ class FireballProjectile:
 		add_child(mesh)
 
 	func _process(delta: float) -> void:
+		if homing_target != null:
+			if not homing_target.alive:
+				_explode()  # 目标已死：空中补爆，AoE 溅射周边
+				return
+			target = homing_target.aim_center()
 		var to := target - global_position
 		var step: float = speed * delta
 		if to.length() <= step:
@@ -281,9 +318,6 @@ class FireballProjectile:
 				for e in caster.battlefield.enemies:
 					if e.has_method("try_dodge_fire"):
 						e.try_dodge_fire(target)
-		if single_target != null and not single_target.alive:
-			_explode()  # 目标已死，原地补爆
-			return
 
 	func _explode() -> void:
 		if caster == null:

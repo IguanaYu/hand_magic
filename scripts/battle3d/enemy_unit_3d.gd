@@ -31,7 +31,6 @@ const UNIT_STATS := {
 const MELEE_DIST := 3.0
 const MELEE_DMG := 15.0
 const MELEE_INTERVAL := 1.2
-const FROZEN_FACTOR := 0.45
 ## 维京只在玩家前方半圆盘旋（cos(a) 超过该值就折返）
 const ORBIT_FRONT_COS := -0.15
 const ORBIT_SPEED := 0.35
@@ -139,8 +138,11 @@ func _process(delta: float) -> void:
 		return
 	if frozen_t > 0.0:
 		frozen_t -= delta
-	if _freeze_shell != null:
-		_freeze_shell.visible = frozen_t > 0.0
+		if _freeze_shell != null:
+			_freeze_shell.visible = true
+		return  # 冰冻=定身：完全停摆（不动/不打/不转状态机，与马里奥版一致）
+	elif _freeze_shell != null:
+		_freeze_shell.visible = false
 	if flying:
 		_process_flying(delta)
 		return
@@ -192,7 +194,6 @@ func aim_center() -> Vector3:
 # ---------- 地面行为 ----------
 
 func _advance(delta: float) -> void:
-	var factor := FROZEN_FACTOR if frozen_t > 0.0 else 1.0
 	# 第一段：先走向中间集结点（不理会停距）
 	if has_waypoint:
 		var to_wp := waypoint - global_position
@@ -200,7 +201,7 @@ func _advance(delta: float) -> void:
 		if to_wp.length() <= 1.2:
 			has_waypoint = false
 		else:
-			global_position += to_wp.normalized() * speed * factor * delta
+			global_position += to_wp.normalized() * speed * delta
 			return
 	# 第二段：朝玩家推进
 	var to_player := player_pos - global_position
@@ -216,7 +217,7 @@ func _advance(delta: float) -> void:
 		_play("attack")
 		reached_melee.emit(self)
 		return
-	global_position += to_player.normalized() * speed * factor * delta
+	global_position += to_player.normalized() * speed * delta
 
 
 # ---------- 飞行行为 ----------
@@ -224,11 +225,10 @@ func _advance(delta: float) -> void:
 func _process_flying(delta: float) -> void:
 	if _shadow != null:
 		_shadow.global_position = Vector3(global_position.x, 0.03, global_position.z)
-	var factor := FROZEN_FACTOR if frozen_t > 0.0 else 1.0
 	match state:
 		State.FLY_IN:
 			var to := _fly_target - global_position
-			var step := speed * factor * delta
+			var step := speed * delta
 			if to.length() <= step + 0.5:
 				if unit_key == "medivac":
 					state = State.HOVER_DROP
@@ -247,7 +247,7 @@ func _process_flying(delta: float) -> void:
 				_strafe_t = randf_range(2.5, 4.5)
 				if randf() < 0.4:
 					_orbit_dir *= -1.0
-			var next_a := _orbit_a + _orbit_dir * ORBIT_SPEED * factor * delta
+			var next_a: float = _orbit_a + _orbit_dir * ORBIT_SPEED * delta
 			# 折返约束：始终留在玩家前方半圆
 			if cos(next_a) > ORBIT_FRONT_COS:
 				_orbit_dir *= -1.0
@@ -259,13 +259,11 @@ func _process_flying(delta: float) -> void:
 			_bank_toward(-_orbit_dir * 0.3, delta)
 			_update_fire(delta)
 		State.HOVER_DROP:
-			# 悬停微摆
+			# 悬停微摆（冻结时 _process 已提前 return，整个状态停摆含卸载）
 			var t := Time.get_ticks_msec() * 0.001
 			var bob := Vector3(sin(t * 1.1 + _bob_phase), sin(t * 1.7 + _bob_phase), cos(t * 0.9 + _bob_phase)) * 0.4
 			global_position = _fly_target + bob
 			_face_to(player_pos - global_position)
-			if frozen_t > 0.0:
-				return  # 冻结时暂停卸载
 			_drop_t -= delta
 			if _drop_left > 0 and _drop_t <= 0.0:
 				_drop_left -= 1
@@ -324,7 +322,7 @@ func take_damage(dmg: float) -> bool:
 	return false
 
 
-## 元素伤害入口（法术统一走这里）：默认=直伤+冰冻减速，行为与旧直伤路径一致；
+## 元素伤害入口（法术统一走这里）：默认=直伤+冰冻定身（冻结期间完全停摆）；
 ## 马里奥单位（MarioEnemy3D）覆写实现元素克制表（GDD §3）。
 ## 返回实际伤害：>0=受伤数值（飘字用），0=无伤，<0=免疫（飘"免疫"）。
 func apply_spell(element: String, dmg: float, _dir: Vector3 = Vector3.ZERO) -> float:
@@ -469,9 +467,8 @@ func on_separated(_push: Vector3) -> void:
 
 # ---------- 开火 ----------
 
+## 仅在非冻结路径被调用（冻结时 _process 提前 return，射击自然停摆）
 func _update_fire(delta: float) -> void:
-	if frozen_t > 0.0:
-		return  # 冰冻期间停止射击
 	if _burst_left > 0:
 		_burst_t -= delta
 		if _burst_t <= 0.0:

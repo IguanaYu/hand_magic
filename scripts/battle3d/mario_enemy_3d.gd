@@ -8,7 +8,7 @@ extends EnemyUnit3D
 ##           冰冻不发射；久置 6s 无主溜走（escaped，不计分）
 ##   boo     火系临近→隐身侧闪（闪避期间无敌，火球必空）；链电 ×2 且隐身照样命中；
 ##           冰免疫；风小伤+击飞；大眼始终盯玩家
-##   bowser  Boss：火/掌心 ×1.0，链电 ×0.8，风 ×0.2（打不动），冰减速（半血狂暴后免疫）；
+##   bowser  Boss：火/掌心 ×1.0，链电 ×0.8，风 ×0.2（打不动），冰定身（半血狂暴后免疫）；
 ##           周期咆哮演出；壳撞它只扣 30 固定伤
 ## 素材：res://assets3d/mario/<key>.glb（mario_kit 单件，动画片段 <key>_idle/_move，
 ## 壳只有 shell_move、金币 coin_idle；原始尺寸 0.3~0.7m（anim_probe_mario 实测），
