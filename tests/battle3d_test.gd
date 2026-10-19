@@ -174,7 +174,7 @@ func _run() -> void:
 	_check("火球追踪：横移目标仍命中",
 		not is_instance_valid(mv) or not mv.alive)
 
-	# --- 火球追踪：吸附圈外不锁定（画哪打哪的瞄准意义保留） ---
+	# --- 火球追踪：6m 外不锁定（画哪打哪的瞄准意义保留） ---
 	var far_e: EnemyUnit3D = battlefield.spawn_enemy("marine")
 	far_e.global_position = Vector3(12.0, 0.0, -13.0)  # 落点 12m > 吸附 6m
 	far_e.speed = 0.0
@@ -183,6 +183,19 @@ func _run() -> void:
 	_check("火球追踪：6m 外不吸附，按落点引爆",
 		is_instance_valid(far_e) and far_e.alive)
 	far_e.take_damage(999.0)
+
+	# --- 火球追踪：射线锥形吸附（视差场景，真机"空了好几个"的主因）——
+	# 画符 1.2s 期间敌人走位，松笔时射线从敌人头顶 2m 掠过、打到 22m 外地面：
+	# 落点吸附（6m 圈）够不着，锥形吸附（射线垂直距 <3m）必须咬住 ---
+	var cone: EnemyUnit3D = battlefield.spawn_enemy("marine")
+	cone.global_position = Vector3(2.4, 0.0, -18.0)
+	cone.speed = 0.0
+	var org: Vector3 = battlefield.camera.global_position
+	var cdir: Vector3 = (Vector3(0.6, 0.35, -30.0) - org).normalized()  # 地面交点 ~(0.8,0,-40)
+	battlefield.spell_caster._spawn_fireball({"enemy": null, "point": Vector3(0.8, 0.0, -40.0), "origin": org, "dir": cdir})
+	await get_tree().create_timer(2.0).timeout
+	_check("火球追踪：射线掠头 2m 锥形吸附（视差/空炸场景）",
+		not is_instance_valid(cone) or not cone.alive)
 
 	# --- 冰冻=定身：冻结中纹丝不动（旧为减速 0.45 继续走） ---
 	var fz2: EnemyUnit3D = battlefield.spawn_enemy("marine")

@@ -6,9 +6,13 @@ extends Node3D
 const FIREBALL_DMG := 40.0
 const FIREBALL_RADIUS := 2.5
 const FIREBALL_SPEED := 18.0
-const FIREBALL_SNAP := 6.0  # 落点吸附半径：落点附近最近的敌人会被锁定追踪。
+const FIREBALL_SNAP := 6.0  # 落点吸附半径：地面交点附近最近的敌人会被锁定追踪。
                              # 参照=落点（保留"画哪打哪"的瞄准意义）；要改成
                              # "全场离玩家最近"把 _snap_enemy 的参照换成 PLAYER_POS
+const FIREBALL_SNAP_RAY := 3.0  # 射线锥形吸附：投射线到敌人瞄准中心垂直距 <此值即锁定。
+                                # 视差免疫——画符 ~1.2s 期间敌人走位，松笔时射线常从
+                                # 敌人头顶/身侧掠过打到几十米外的地面，按地面交点吸附
+                                # 够不着（空炸主因）；按射线本身吸附才咬得住
 const LIGHTNING_DMG := 25.0
 const LIGHTNING_TARGETS := 3
 const ICE_RADIUS := 6.0
@@ -53,8 +57,8 @@ func aim(screen_pos: Vector2) -> Dictionary:
 	var dir: Vector3 = battlefield.camera.project_ray_normal(screen_pos)
 	var enemy := _ray_hit_enemy(origin, dir)
 	if enemy != null:
-		return {"enemy": enemy, "point": enemy.aim_center()}
-	return {"enemy": null, "point": _ground_point(origin, dir)}
+		return {"enemy": enemy, "point": enemy.aim_center(), "origin": origin, "dir": dir}
+	return {"enemy": null, "point": _ground_point(origin, dir), "origin": origin, "dir": dir}
 
 
 func aim_ground(screen_pos: Vector2) -> Vector3:
@@ -115,8 +119,10 @@ func _spawn_fireball(aim: Dictionary) -> void:
 	battlefield.play_sfx("cast_fire", Vector3.INF, -4.0)
 	var fx := FireballProjectile.new()
 	fx.caster = self
-	# 锁定优先级：射线直击 > 落点吸附圈内最近敌人 > 无锁定（照旧飞地面落点炸）
+	# 锁定优先级：射线直击 > 射线锥形吸附（视差免疫）> 地面落点圈 > 无锁定照旧飞落点
 	var lock: EnemyUnit3D = aim["enemy"]
+	if lock == null and aim.has("origin"):
+		lock = _snap_enemy_ray(aim["origin"], aim["dir"], FIREBALL_SNAP_RAY)
 	if lock == null:
 		lock = _snap_enemy(aim["point"], FIREBALL_SNAP)
 	if lock != null:
@@ -127,6 +133,27 @@ func _spawn_fireball(aim: Dictionary) -> void:
 	var launch := battlefield.camera.global_position + battlefield.camera.global_transform.basis.z * 1.2 - Vector3.UP * 0.3
 	fx.position = launch
 	battlefield.fx_layer.add_child(fx)
+
+
+## 射线锥形吸附：投射线到敌人瞄准中心的垂直距离 <radius 即锁定（无需射线真的
+## 打到敌人或地面交点在附近）。跳过隐身幽灵——与 _ray_hit_enemy 同规则
+func _snap_enemy_ray(origin: Vector3, dir: Vector3, radius: float) -> EnemyUnit3D:
+	var best: EnemyUnit3D = null
+	var best_d2 := radius * radius
+	for e in battlefield.enemies:
+		if not e.alive:
+			continue
+		if "is_stealthed" in e and e.is_stealthed():
+			continue
+		var oc: Vector3 = e.aim_center() - origin
+		var t: float = oc.dot(dir)
+		if t < 0.0:
+			continue  # 在相机身后
+		var perp2: float = oc.length_squared() - t * t
+		if perp2 < best_d2:
+			best_d2 = perp2
+			best = e
+	return best
 
 
 ## 落点吸附：radius 内（XZ 距离）最近的活敌。跳过隐身幽灵——与 _ray_hit_enemy
