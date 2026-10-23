@@ -27,6 +27,8 @@ var battle3d: Battlefield3D
 var codex: CodexPanel
 var rune_store: RuneSamples
 var record_panel: RuneRecordPanel
+var loadout: SpellLoadout
+var loadout_panel: SpellLoadoutPanel
 var mode3d := false
 
 var _cam_container: SubViewportContainer
@@ -83,6 +85,8 @@ func _gui_dump() -> void:
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	# 扩展手势开关：分类器与 FSM 的 extended_gestures 保持同一开关（默认关闭）
+	pose_classifier.extended_poses = GestureFSM.extended_gestures
 	practice_mode = "--e2e-test" in args
 	if "--anim-probe" in args:
 		add_child(load("res://tests/anim_probe.gd").new())
@@ -121,9 +125,15 @@ func _ready() -> void:
 		return
 	if "--shot3d" in args:
 		_build_3d("--mario" in args)
-		# --codex 附带参数：截图前打开手势图鉴（目检面板布局）
+		# --codex 附带参数：截图前打开手势图鉴（目检面板布局，--codex-page=1 切骨架页）
 		if "--codex" in args:
 			codex.open()
+			for a in args:
+				if a.begins_with("--codex-page="):
+					codex._set_page(int(a.get_slice("=", 1)))
+		# --loadout 附带参数：截图前打开法术配置面板（目检勾选布局）
+		if "--loadout" in args:
+			loadout_panel.open()
 		if "--mario" in args:
 			# 马里奥全家福：栗宝宝排排站 + 慢慢龟 + 幽灵 + 库巴压轴
 			for i in 5:
@@ -247,6 +257,17 @@ func _build_3d(mario := false) -> void:
 	codex = CodexPanel.new()
 	codex.fsm = fsm
 	battle3d.add_child(codex)
+	# 法术装备：读档（无存档/损坏=默认全装备）→ 注入施法闸与 UI；配置面板 + HUD 按钮
+	loadout = SpellLoadout.new()
+	loadout.load()
+	fsm.loadout = loadout
+	battle3d.loadout = loadout
+	codex.loadout = loadout
+	loadout.changed.connect(func(): battle3d.spell_bar.queue_redraw())
+	loadout_panel = SpellLoadoutPanel.new()
+	loadout_panel.loadout = loadout
+	loadout_panel.battle = battle3d
+	battle3d.add_child(loadout_panel)
 	# 符文录制：读档样本注入识别器（附加模板，不录也能玩）+ 面板 + HUD 按钮
 	rune_store = RuneSamples.new()
 	_load_user_rune_samples()
@@ -259,9 +280,12 @@ func _build_3d(mario := false) -> void:
 	battle3d.add_child(record_panel)
 	fsm.cast_performed.connect(record_panel._on_cast)
 	fsm.fizzle.connect(record_panel._on_fizzle)
-	codex.open_guard = func(): return record_panel.is_open()
-	record_panel.open_guard = func(): return codex.is_open()
+	# 三面板互斥（图鉴/录制/配置任意一个开着都不许开另一个）
+	codex.open_guard = func(): return record_panel.is_open() or loadout_panel.is_open()
+	record_panel.open_guard = func(): return codex.is_open() or loadout_panel.is_open()
+	loadout_panel.open_guard = func(): return codex.is_open() or record_panel.is_open()
 	_add_record_button()
+	_add_loadout_button()
 	_wire_3d_signals()
 
 
@@ -294,6 +318,27 @@ func _add_record_button() -> void:
 	btn.add_theme_stylebox_override("hover", sb_h)
 	btn.position = Vector2(12, 8)
 	btn.pressed.connect(func(): record_panel.toggle())
+	battle3d.ui_layer.add_child(btn)
+
+
+## 法术配置按钮（与录制按钮并排）：勾选当前可施放的法术（上限暂定 5）
+func _add_loadout_button() -> void:
+	var btn := Button.new()
+	btn.text = "法术配置 (C)"
+	btn.tooltip_text = "勾选要使用的法术（最多同时 %d 个，暂定）；未勾选的无法施放" % SpellLoadout.MAX_EQUIPPED
+	btn.add_theme_font_size_override("font_size", 14)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.10, 0.18, 0.85)
+	sb.border_color = Color(0.35, 0.55, 0.85, 0.7)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(5)
+	sb.set_content_margin_all(6)
+	btn.add_theme_stylebox_override("normal", sb)
+	var sb_h := sb.duplicate()
+	sb_h.bg_color = Color(0.14, 0.19, 0.32, 0.9)
+	btn.add_theme_stylebox_override("hover", sb_h)
+	btn.position = Vector2(12, 44)
+	btn.pressed.connect(func(): loadout_panel.toggle())
 	battle3d.ui_layer.add_child(btn)
 
 

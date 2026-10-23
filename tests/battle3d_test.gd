@@ -374,6 +374,84 @@ func _run() -> void:
 		store.save()
 		process_mode = Node.PROCESS_MODE_INHERIT
 
+	# ===== 法术配置面板（C / HUD 按钮）=====
+
+	var lp: SpellLoadoutPanel = main_ref.loadout_panel
+	var lo: SpellLoadout = main_ref.loadout
+	_check("配置：面板/装备数据/施法闸接线完整",
+		lp != null and lo != null and main_ref.fsm.loadout == lo and battlefield.loadout == lo)
+	if lp != null and lo != null:
+		# 测试隔离：换测试存档路径，不碰玩家真实配置；回到已知全装备态
+		lo.save_path = "user://test_spell_loadout.json"
+		lo.reset_default()
+		lo.save()
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		lp.open()
+		_check("配置：打开面板即暂停", get_tree().paused and lp.is_open())
+		_check("配置：战场冻结", battlefield.process_mode == Node.PROCESS_MODE_DISABLED)
+		# 面板勾选框取消冰域（真实 toggled 信号路径 → loadout 联动）
+		lp._buttons["ice_field"].button_pressed = false
+		_check("配置：取消冰域联动装备数据", not lo.is_equipped("ice_field") and lo.count() == 4)
+		# 关闭：存档 + 恢复（配置面板不跑手势管线，闸验证在非暂停态做）
+		lp.close()
+		_check("配置：关闭恢复不暂停+战场解冻",
+			not get_tree().paused and battlefield.process_mode == Node.PROCESS_MODE_INHERIT)
+		_check("配置：关闭写盘", FileAccess.file_exists(lo.save_path))
+		var lochk := SpellLoadout.new()
+		lochk.save_path = lo.save_path
+		lochk.load()
+		_check("配置：存档内容正确（4 装备，冰域未勾）", lochk.count() == 4 and not lochk.is_equipped("ice_field"))
+		# FSM 施法闸端到端（真实管线喂三角）：未装备 → fizzle"未装备该法术"不施放
+		main_ref.mode3d = true
+		var casts0: int = main_ref.fsm.cast_count
+		var fizz0: int = main_ref.fsm.fizzle_count
+		# 三角形路径与 e2e_test._triangle_path 同款（管线实测可稳定识别为 triangle）
+		var tri_top := Vector2(0.5, 0.34)
+		var tri_size := 0.28
+		var tri_verts := [tri_top, tri_top + Vector2(tri_size * 0.6, tri_size),
+			tri_top + Vector2(-tri_size * 0.6, tri_size), tri_top]
+		var tri_pts: Array = []
+		for vi in range(tri_verts.size() - 1):
+			for s in range(8):
+				tri_pts.append(tri_verts[vi].lerp(tri_verts[vi + 1], float(s) / 8.0))
+		tri_pts.append(tri_top)
+		var t1 := Time.get_ticks_msec()
+		while main_ref.fsm.state != GestureFSM.State.DRAWING and Time.get_ticks_msec() - t1 < 3000:
+			main_ref._on_hands_updated([_pinch_hand(tri_pts[0])])
+			await get_tree().process_frame
+		for pt in tri_pts:
+			main_ref._on_hands_updated([_pinch_hand(pt)])
+			await get_tree().process_frame
+		t1 = Time.get_ticks_msec()
+		while main_ref.fsm.state != GestureFSM.State.COOLDOWN and Time.get_ticks_msec() - t1 < 2000:
+			main_ref._on_hands_updated([_fist_hand()])
+			await get_tree().process_frame
+		_check("配置：未装备冰域画三角被闸（fizzle 未装备该法术）",
+			main_ref.fsm.fizzle_count == fizz0 + 1 and main_ref.fsm.last_fizzle_reason == "未装备该法术"
+			and main_ref.fsm.cast_count == casts0)
+		# 数字键直放旁路同规则：未装备的 KEY_3 无效，装备的 KEY_1 照常闪光+施放
+		var ev3 := InputEventKey.new()
+		ev3.keycode = KEY_3
+		ev3.pressed = true
+		battlefield._unhandled_input(ev3)
+		var ev1 := InputEventKey.new()
+		ev1.keycode = KEY_1
+		ev1.pressed = true
+		battlefield._unhandled_input(ev1)
+		_check("配置：数字键未装备被拦/装备照常",
+			not battlefield.spell_bar._flash_left.has(KEY_3) and battlefield.spell_bar._flash_left.has(KEY_1))
+		lo.reset_default()
+		lo.save()
+		main_ref.mode3d = false
+		process_mode = Node.PROCESS_MODE_INHERIT
+
+	# ===== 图鉴手势骨架数据 =====
+	var pose_ok: bool = CodexPanel.POSE_ENTRIES.size() == 6
+	for pe in CodexPanel.POSE_ENTRIES:
+		pose_ok = pose_ok and CodexPanel.HAND_POSES.has(str(pe["id"])) \
+			and CodexPanel.HAND_POSES[str(pe["id"])].size() == 21
+	_check("图鉴：手势骨架数据完整（6 姿势×21 点）", pose_ok)
+
 	_finish()
 
 

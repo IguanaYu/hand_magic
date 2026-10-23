@@ -34,12 +34,38 @@ signal quick_shot_performed(anchor: Vector2)
 
 enum State { IDLE, CHARGE, DRAWING, COOLDOWN }
 
+## 扩展手势总开关（2026-10 调研落地，docs/research-gesture-survey-2026-10.md）。
+## 打开后两件事生效：
+## ① PoseClassifier 开始识别三个新静态手形：比耶 VICTORY / 点赞 THUMB_UP / 我爱你
+##    ILOVEYOU（main._ready 把本开关同步给分类器的 extended_poses；FSM 本身不消费
+##    这些姿势，照旧当 NONE——游戏性绑定留到启用阶段再设计）。
+## ② S 波 wave 符文替换三角成为冰霜领域唯一符文（启用即替换语义，调研方案 A）：
+##    识别器先移除全部三角模板（含玩家录制）再注册 wave；RUNE_TO_SPELL 里的
+##    triangle 条目从 effective_rune_map 剔除，符文样本存取（RuneSamples.rune_of）
+##    也随之把 ice_field 反查成 wave。注意：玩家旧录的三角样本按 spell_id 存档，
+##    启用后会以 wave 名注入但形状是三角，只会拉低识别分（fizzle）不会误施放，
+##    启用前建议清一次冰霜样本。
+## 正式版启用时改 true（或运行期直接赋值）；默认 false = 现役行为零变化。
+## 做成 static var 而非 const：单测需要临时翻转以覆盖扩展路径，测完还原。
+static var extended_gestures := false
+
 const RUNE_TO_SPELL := {
 	"circle": "fireball",
 	"zigzag": "lightning",
 	"triangle": "ice_field",
 	"slash": "wind_blade",
 }
+
+
+## 当前生效的符文映射：默认返回 RUNE_TO_SPELL 原表；扩展开启时 wave 替换 triangle。
+## 符文样本存取、录制面板等所有"spell_id ↔ 符文名"逻辑都应走这里而非直查常量表。
+static func effective_rune_map() -> Dictionary:
+	if not extended_gestures:
+		return RUNE_TO_SPELL
+	var out := RUNE_TO_SPELL.duplicate()
+	out.erase("triangle")
+	out["wave"] = "ice_field"
+	return out
 const SPELL_COST := {
 	"fireball": 25.0,
 	"lightning": 12.0,
@@ -95,6 +121,13 @@ var _pinch_armed := true      # 起笔再装填锁存：收笔后须先明确分
                               # 必须锁存：装填若随实时捏距清零，捏合期间计时永远归零
                               # → 起笔被永久封锁；只在下一次收笔时卸下
 var _sep_ms := 0.0            # 未装填时拇指食指分开（原始捏距>退出阈值）累计时长
+var _rune_map: Dictionary = effective_rune_map()  # 施放查表用；随扩展开关联动 wave/triangle
+var loadout: SpellLoadout = null  # 玩家装备配置（main 注入）；null = 全装备（旧测试/调用方兼容）
+
+
+func _init() -> void:
+	if extended_gestures:
+		recognizer.register_extended_runes()
 
 
 func reset() -> void:
@@ -203,6 +236,10 @@ func _enter_charge() -> void:
 
 ## 快速施法（M0.5）：聚气中直接张掌 = 掌心火弹（不画符的快速攻击路径）
 func _quick_shot() -> void:
+	# 装备闸：与画符路径同规则
+	if loadout != null and not loadout.is_equipped("quick_shot"):
+		_fizzle("未装备该法术")
+		return
 	if mana < QUICK_COST:
 		_fizzle("法力不足")
 		return
@@ -310,9 +347,13 @@ func _release() -> void:
 	if last_result.score < CAST_THRESHOLD:
 		# 模糊区间：宽容施放但记一笔（GDD §3.4 模糊提示）
 		pass
-	var spell_id: String = RUNE_TO_SPELL.get(str(last_result.name), "")
+	var spell_id: String = _rune_map.get(str(last_result.name), "")
 	if spell_id.is_empty():
 		_fizzle("未知符文")
+		return
+	# 装备闸：玩家在配置面板（C）勾掉的法术不可施放，不扣法力
+	if loadout != null and not loadout.is_equipped(spell_id):
+		_fizzle("未装备该法术")
 		return
 	var cost: float = SPELL_COST[spell_id]
 	if mana < cost:

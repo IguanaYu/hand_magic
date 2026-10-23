@@ -15,6 +15,12 @@ var mana := 100.0:
 			mana = v
 			queue_redraw()
 
+## 玩家装备配置（main 注入）；null = 全装备。未装备的槽整槽压暗并标"未装备"
+var loadout: SpellLoadout = null:
+	set(v):
+		loadout = v
+		queue_redraw()
+
 var _entries: Array[Dictionary] = []
 var _flash_left := {}   # 键码 -> 剩余闪光秒数
 
@@ -48,6 +54,7 @@ func _draw() -> void:
 		var e: Dictionary = _entries[i]
 		var r := Rect2(Vector2(x0 + i * (SLOT.x + GAP), y0), SLOT)
 		var affordable: bool = mana >= float(e["cost"])
+		var equipped: bool = loadout == null or loadout.is_equipped(str(e["id"]))
 		draw_rect(r, Color(0.05, 0.06, 0.10, 0.72))
 		draw_rect(r, Color(0.55, 0.75, 1.0, 0.35), false, 1.0)
 		# 键位数字（左上角标）
@@ -70,8 +77,13 @@ func _draw() -> void:
 		var cost_color := Color(0.45, 0.65, 1.0, 0.9) if affordable else Color(0.4, 0.45, 0.55, 0.6)
 		draw_string(font, Vector2(r.position.x, r.position.y + 94.0), "%d 法力" % int(e["cost"]),
 			HORIZONTAL_ALIGNMENT_CENTER, SLOT.x, 12, cost_color)
-		# 法力不足：整槽压暗（盖在内容之上）
-		if not affordable:
+		# 未装备：整槽压暗 + 角标（盖在内容之上，优先级高于法力不足）
+		if not equipped:
+			draw_rect(r, Color(0.0, 0.0, 0.05, 0.6))
+			draw_string(font, Vector2(r.position.x, r.position.y + 58.0), "未装备",
+				HORIZONTAL_ALIGNMENT_CENTER, SLOT.x, 12, Color(1.0, 0.55, 0.45, 0.9))
+		elif not affordable:
+			# 法力不足：整槽压暗（盖在内容之上）
 			draw_rect(r, Color(0.0, 0.0, 0.05, 0.45))
 		# 按键施放闪光
 		var fl := float(_flash_left.get(int(e["key"]), 0.0))

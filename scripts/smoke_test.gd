@@ -5,7 +5,7 @@ extends RefCounted
 ## 期望: 全部 PASS（合成轨迹识别率 100%）。
 
 
-const POSE_NAMES := ["NONE", "FIST", "PALM", "DRAWING", "PINCH"]
+const POSE_NAMES := ["NONE", "FIST", "PALM", "DRAWING", "PINCH", "VICTORY", "THUMB_UP", "ILOVEYOU"]
 
 
 static func run() -> int:
@@ -150,6 +150,16 @@ static func run() -> int:
 	var fsm_ok := _test_fsm()
 	pass_count += fsm_ok[0]
 	fail_count += fsm_ok[1]
+
+	# 扩展手势（2026-10 调研落地）：默认关闭=旧行为锚，开启=新手形/新符文可用
+	var ext_ok := _test_extended()
+	pass_count += ext_ok[0]
+	fail_count += ext_ok[1]
+
+	# 法术装备：数据/持久化单测 + 三处施法闸
+	var lo_ok := _test_loadout()
+	pass_count += lo_ok[0]
+	fail_count += lo_ok[1]
 
 	print("-------- 结果: %d PASS / %d FAIL --------" % [pass_count, fail_count])
 	# GDMP 卸载死锁导致 stdout 缓冲可能丢失：结果同步写入文件
@@ -444,6 +454,414 @@ static func _test_fsm() -> Array:
 		f += 1
 	print("%s fsm.rearm: 拳→张掌假捏合被拦=%s，张开后起笔恢复=%s" % [
 		"[PASS]" if rearm_ok else "[FAIL]", false_ok, fsm7.state == GestureFSM.State.DRAWING])
+
+	return [p, f]
+
+
+## ---------- 扩展手势合成手工厂（21 关键点，基于 _base_hand 的掌长 0.11） ----------
+
+static func _make_victory() -> Array:
+	# 比耶：食指+中指伸直张开，无名指+小指弯（旧管线判 NONE）
+	var lms := _base_hand()
+	lms[8] = Vector2(0.44, 0.38)
+	lms[12] = Vector2(0.52, 0.34)
+	lms[16] = Vector2(0.57, 0.62)
+	lms[20] = Vector2(0.61, 0.65)
+	return lms
+
+
+static func _make_iloveyou() -> Array:
+	# 我爱你：拇指+食指+小指伸，中指+无名指弯（旧管线判 NONE）
+	var lms := _base_hand()
+	lms[4] = Vector2(0.36, 0.50)
+	lms[8] = Vector2(0.44, 0.38)
+	lms[12] = Vector2(0.52, 0.60)
+	lms[16] = Vector2(0.57, 0.62)
+	lms[20] = Vector2(0.64, 0.42)
+	return lms
+
+
+static func _make_thumb_up() -> Array:
+	# 点赞：四指全卷（拳形）+ 拇指竖起（拇指尖-小指根距离/掌长 ≈2.5 > 阈值 1.8；
+	# 旧管线判 FIST——点赞是从拳分出的拇指伸直亚型）
+	var lms := _make_fist()
+	lms[1] = Vector2(0.42, 0.64)
+	lms[2] = Vector2(0.40, 0.58)
+	lms[3] = Vector2(0.39, 0.52)
+	lms[4] = Vector2(0.38, 0.46)
+	return lms
+
+
+static func _make_none() -> Array:
+	# 只伸中指：进不了拳/掌/画符/捏合，扩展手形也不应吞它 → NONE
+	var lms := _base_hand()
+	lms[8] = Vector2(0.47, 0.62)
+	lms[12] = Vector2(0.51, 0.32)
+	lms[16] = Vector2(0.57, 0.62)
+	lms[20] = Vector2(0.61, 0.65)
+	return lms
+
+
+static func _make_wave(center: Vector2, size: float) -> Array:
+	# 横向正弦 ~1.5 周期（与 dollar_recognizer.register_extended_runes 模板同形）
+	var pts: Array = []
+	for i in range(48):
+		var t := float(i) / 47.0
+		pts.append(center + Vector2((t - 0.5) * 2.6 * size, -sin(t * PI * 3.0) * size))
+	return pts
+
+
+## 扩展手势单测：开关关闭=旧行为逐字节等价（锚）；开关打开=新手形/新符文可用。
+## GestureFSM.extended_gestures 是 static var，测试内临时翻转、结束还原。
+static func _test_extended() -> Array:
+	var p := 0
+	var f := 0
+	var dt := 1.0 / 30.0
+	var anchor := Vector2(0.5, 0.5)
+
+	# --- 默认关闭：三个新手形在现役分类器下的旧行为锚 ---
+	var pc0 := PoseClassifier.new()
+	pc0.confirm_frames = 1
+	var v_old: int = pc0.classify(_make_victory())
+	var t_old: int = pc0.classify(_make_thumb_up())
+	var l_old: int = pc0.classify(_make_iloveyou())
+	var anchors_ok: bool = v_old == PoseClassifier.Pose.NONE and t_old == PoseClassifier.Pose.FIST \
+		and l_old == PoseClassifier.Pose.NONE
+	if anchors_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.anchor: 默认下比耶=%s 点赞=%s 我爱你=%s（期望 无/握拳/无）" % [
+		"[PASS]" if anchors_ok else "[FAIL]", POSE_NAMES[v_old], POSE_NAMES[t_old], POSE_NAMES[l_old]])
+
+	# --- 默认关闭：识别器无 wave 模板 ---
+	var rec0 := DollarRecognizer.new()
+	var no_wave_ok: bool = not rec0.template_counts().has("wave") and rec0.template_counts().size() == 4
+	if no_wave_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.rec_default: 默认识别器无 wave 模板且 4 符文齐" % ["[PASS]" if no_wave_ok else "[FAIL]"])
+
+	# --- 默认关闭 FSM 锚：波形轨迹匹配三角模板 → 施放冰霜（wave↔triangle 混淆对
+	#    的实证锚点，$1 交叉分数 0.885——调研 ICMI 2014「圆↔三角混淆」同源结论）---
+	var cast_spell := {"id": ""}
+	var fsm0 := GestureFSM.new()
+	fsm0.cast_performed.connect(func(s, _a, _sc): cast_spell.id = s)
+	var wave := _make_wave(Vector2(0.5, 0.5), 0.15)
+	for i in range(6):
+		fsm0.update(PoseClassifier.Pose.NONE, true, wave[0].lerp(wave[1], i / 5.0), anchor, dt)
+	fsm0.update(PoseClassifier.Pose.PINCH, true, wave[0], anchor, dt)
+	for i in range(1, wave.size()):
+		fsm0.update(PoseClassifier.Pose.PINCH, true, wave[i], anchor, dt)
+	for i in range(4):
+		fsm0.update(PoseClassifier.Pose.DRAWING, true, wave[wave.size() - 1], anchor, dt)
+	var dfl_wave_ok: bool = cast_spell.id == "ice_field"
+	if dfl_wave_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.fsm_default: 默认下画波形施放=%s（旧行为：经三角模板=冰霜）" % [
+		"[PASS]" if dfl_wave_ok else "[FAIL]", cast_spell.id])
+
+	# --- 开启：三个新静态手形正确分类，且不与现有姿势互串 ---
+	GestureFSM.extended_gestures = true
+	var pcx := PoseClassifier.new()
+	pcx.extended_poses = true
+	pcx.confirm_frames = 1
+	var v_new: int = pcx.classify(_make_victory())
+	var t_new: int = pcx.classify(_make_thumb_up())
+	var l_new: int = pcx.classify(_make_iloveyou())
+	var new_ok: bool = v_new == PoseClassifier.Pose.VICTORY and t_new == PoseClassifier.Pose.THUMB_UP \
+		and l_new == PoseClassifier.Pose.ILOVEYOU
+	if new_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.poses: 开启后比耶=%s 点赞=%s 我爱你=%s" % [
+		"[PASS]" if new_ok else "[FAIL]", POSE_NAMES[v_new], POSE_NAMES[t_new], POSE_NAMES[l_new]])
+
+	# 开启后纯拳/拳内蹭指尖仍判 FIST（点赞不吞拳，捏合 guard 不受影响）
+	var fist_new: int = pcx.classify(_make_fist())
+	var fisttouch_new: int = pcx.classify(_make_fist_touch())
+	var fist_ok: bool = fist_new == PoseClassifier.Pose.FIST and fisttouch_new == PoseClassifier.Pose.FIST
+	if fist_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.fist: 开启后纯拳=%s 拳内蹭指尖=%s（点赞亚型不吞拳）" % [
+		"[PASS]" if fist_ok else "[FAIL]", POSE_NAMES[fist_new], POSE_NAMES[fisttouch_new]])
+
+	# 开启后现有四姿势不串位（捏合/张掌/画符/无照旧）
+	var pinch_new: int = pcx.classify(_make_pinch())
+	var palm_new: int = pcx.classify(_make_palm())
+	var draw_new: int = pcx.classify(_make_drawing())
+	var none_new: int = pcx.classify(_make_none())
+	var old4_ok: bool = pinch_new == PoseClassifier.Pose.PINCH and palm_new == PoseClassifier.Pose.PALM \
+		and draw_new == PoseClassifier.Pose.DRAWING and none_new == PoseClassifier.Pose.NONE
+	if old4_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.old4: 开启后捏合=%s 张掌=%s 画符=%s 无=%s 不串位" % [
+		"[PASS]" if old4_ok else "[FAIL]", POSE_NAMES[pinch_new], POSE_NAMES[palm_new], POSE_NAMES[draw_new], POSE_NAMES[none_new]])
+
+	# 表决去抖对新手形照常生效：5 票制下单帧比耶不切换
+	var pcd := PoseClassifier.new()
+	pcd.extended_poses = true
+	for i in range(20):
+		pcd.classify(_make_palm() if i % 2 == 0 else _make_victory())
+	var flick_ok: bool = pcd.stable_pose() == PoseClassifier.Pose.NONE
+	if flick_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.debounce: 张掌/比耶交替闪烁20帧不切换（got=%s）" % [
+		"[PASS]" if flick_ok else "[FAIL]", POSE_NAMES[pcd.stable_pose()]])
+
+	# --- 开启：识别器 wave 模板 + 三角移除 ---
+	var recx := DollarRecognizer.new()
+	recx.register_extended_runes()
+	var counts: Dictionary = recx.template_counts()
+	var counts_ok: bool = not counts.has("triangle") and counts.has("wave") and counts["wave"]["builtin"] == 1 \
+		and counts.size() == 4
+	if counts_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.rec_counts: 注册后三角移除、wave 就位（%d 符文）" % [
+		"[PASS]" if counts_ok else "[FAIL]", counts.size()])
+
+	var w1 := recx.recognize(_make_wave(Vector2(0.5, 0.5), 0.15))
+	var w2 := recx.recognize(_make_wave(Vector2(0.45, 0.55), 0.10))
+	var wave_ok: bool = w1.name == "wave" and w1.score >= 0.9 and w2.name == "wave" and w2.score >= 0.9
+	if wave_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.wave: 波形识别 %s(%.3f)/%s(%.3f) ≥0.9" % [
+		"[PASS]" if wave_ok else "[FAIL]", w1.name, w1.score, w2.name, w2.score])
+
+	# wave↔zigzag 双向不互认（探针实测：分离度 0.95+，本用例盯住回归）
+	var z1 := recx.recognize(_make_poly([Vector2(0.2, 0.2), Vector2(0.8, 0.2), Vector2(0.25, 0.8), Vector2(0.8, 0.8)]))
+	var z2 := recx.recognize(_make_poly([Vector2(0.3, 0.3), Vector2(0.7, 0.3), Vector2(0.3, 0.7), Vector2(0.7, 0.7)]))
+	var sep_ok: bool = z1.name == "zigzag" and z1.score >= 0.9 and z2.name == "zigzag" and z2.score >= 0.9
+	if sep_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.sep: zigzag 仍判 zigzag %s(%.3f)/%s(%.3f)，不被 wave 抢走" % [
+		"[PASS]" if sep_ok else "[FAIL]", z1.name, z1.score, z2.name, z2.score])
+
+	# 波形加抖动 + 旋转 15° 仍判 wave（低帧率/手抖容忍下限）
+	var rot := deg_to_rad(15.0)
+	var wob: Array = []
+	var raw_wave := _make_wave(Vector2(0.5, 0.5), 0.15)
+	for i in range(raw_wave.size()):
+		wob.append(raw_wave[i].rotated(rot) + Vector2(sin(i * 1.7) * 0.008, cos(i * 2.3) * 0.008))
+	var w3 := recx.recognize(wob)
+	var wob_ok: bool = w3.name == "wave" and w3.score >= 0.8
+	if wob_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.wobble: 抖动+旋转15°波形=%s(%.3f) ≥0.8" % ["[PASS]" if wob_ok else "[FAIL]", w3.name, w3.score])
+
+	# 开启后其余符文不串位：圆/斜线照旧
+	var c1 := recx.recognize(_make_circle(Vector2(0.4, 0.4), 0.15))
+	var s1 := recx.recognize(_make_poly([Vector2(0.2, 0.8), Vector2(0.8, 0.2)]))
+	var others_ok: bool = c1.name == "circle" and c1.score >= 0.9 and s1.name == "slash" and s1.score >= 0.9
+	if others_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.others: 圆=%s(%.3f) 斜线=%s(%.3f) 不受影响" % [
+		"[PASS]" if others_ok else "[FAIL]", c1.name, c1.score, s1.name, s1.score])
+
+	# --- 开启 FSM：画波形施放冰霜；画旧三角经 wave 模板同样施放冰霜
+	#（肌肉记忆平滑降级而非 fizzle，探针实测交叉分 0.887）---
+	var cast2 := {"id": "", "rune": ""}
+	var fsmx := GestureFSM.new()  # flag 已开：_init 已注册 wave、移除三角
+	fsmx.cast_performed.connect(func(s, _a, sc): cast2.id = s; cast2.rune = str(fsmx.last_result.name))
+	for i in range(6):
+		fsmx.update(PoseClassifier.Pose.NONE, true, wave[0].lerp(wave[1], i / 5.0), anchor, dt)
+	fsmx.update(PoseClassifier.Pose.PINCH, true, wave[0], anchor, dt)
+	for i in range(1, wave.size()):
+		fsmx.update(PoseClassifier.Pose.PINCH, true, wave[i], anchor, dt)
+	for i in range(4):
+		fsmx.update(PoseClassifier.Pose.DRAWING, true, wave[wave.size() - 1], anchor, dt)
+	var wave_cast_ok: bool = cast2.id == "ice_field" and cast2.rune == "wave"
+	if wave_cast_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.fsm_wave: 开启后画波形施放=%s 经=%s（期望 ice_field/wave）" % [
+		"[PASS]" if wave_cast_ok else "[FAIL]", cast2.id, cast2.rune])
+
+	var cast3 := {"id": ""}
+	var fsmx2 := GestureFSM.new()
+	fsmx2.cast_performed.connect(func(s, _a, _sc): cast3.id = s)
+	var tri := _make_poly([Vector2(0.5, 0.15), Vector2(0.85, 0.8), Vector2(0.15, 0.8), Vector2(0.5, 0.15)])
+	for i in range(6):
+		fsmx2.update(PoseClassifier.Pose.NONE, true, tri[0].lerp(tri[1], i / 5.0), anchor, dt)
+	fsmx2.update(PoseClassifier.Pose.PINCH, true, tri[0], anchor, dt)
+	for i in range(1, tri.size()):
+		fsmx2.update(PoseClassifier.Pose.PINCH, true, tri[i], anchor, dt)
+	for i in range(4):
+		fsmx2.update(PoseClassifier.Pose.DRAWING, true, tri[tri.size() - 1], anchor, dt)
+	var tri_cast_ok: bool = cast3.id == "ice_field" and str(fsmx2.last_result.name) == "wave"
+	if tri_cast_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.fsm_tri: 开启后画旧三角=%s 经=%s（肌肉记忆平滑降级，仍冰霜）" % [
+		"[PASS]" if tri_cast_ok else "[FAIL]", cast3.id, fsmx2.last_result.name])
+
+	# --- rune_of 反查随开关联动（样本存取/录制面板的共同入口）---
+	var rune_ext: String = RuneSamples.rune_of("ice_field")  # 仍处于开启态
+	GestureFSM.extended_gestures = false
+	var rune_dfl: String = RuneSamples.rune_of("ice_field")
+	var rune_ok: bool = rune_ext == "wave" and rune_dfl == "triangle"
+	if rune_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s ext.rune_of: ice_field 反查 开启=%s 关闭=%s（期望 wave/triangle）" % [
+		"[PASS]" if rune_ok else "[FAIL]", rune_ext, rune_dfl])
+
+	return [p, f]
+
+
+## 法术装备单测：默认全装备/勾选/上限拒绝/存读回环/损坏降级/FSM 施法闸。
+## 存档走测试路径（user://test_spell_loadout.json），不碰玩家真实配置。
+static func _test_loadout() -> Array:
+	var p := 0
+	var f := 0
+	var dt := 1.0 / 30.0
+	var anchor := Vector2(0.5, 0.5)
+
+	# --- 默认全装备（现役玩法零变化的语义锚）+ 勾选/取消 ---
+	var lo := SpellLoadout.new()
+	lo.save_path = "user://test_spell_loadout.json"
+	lo.reset_default()
+	var dfl_ok: bool = lo.count() == 5 and lo.is_equipped("fireball") and lo.is_equipped("quick_shot")
+	lo.unequip("ice_field")
+	var un_ok: bool = lo.count() == 4 and not lo.is_equipped("ice_field")
+	var re_ok: bool = lo.equip("ice_field") == "ok" and lo.count() == 5
+	# --- 上限拒绝：调小上限验证（池子=5=暂定上限，默认参数触发不了 full）---
+	lo.unequip("wind_blade")
+	lo.max_equipped = 4
+	lo.unequip("lightning")
+	var full_ok: bool = lo.count() == 3 and lo.equip("lightning") == "ok" and lo.equip("wind_blade") == "full"
+	var unk_ok: bool = lo.equip("bogus") == "unknown"
+	var states_ok: bool = dfl_ok and un_ok and re_ok and full_ok and unk_ok
+	if states_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s loadout.data: 默认5=%s 取消=%s 复勾=%s 超限拒=%s 非法id拒=%s" % [
+		"[PASS]" if states_ok else "[FAIL]", dfl_ok, un_ok, re_ok, full_ok, unk_ok])
+
+	# --- 存读回环 ---
+	lo.unequip("ice_field")
+	var save_ok: bool = lo.save()
+	var lo2 := SpellLoadout.new()
+	lo2.save_path = lo.save_path
+	var load_ok: bool = lo2.load() and lo2.count() == 3 and not lo2.is_equipped("ice_field") \
+		and not lo2.is_equipped("wind_blade") and lo2.is_equipped("fireball")
+	var persist_ok: bool = save_ok and load_ok
+	if persist_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s loadout.save: 存档=%s 读档=%s（3 装备，冰域/风刃未勾）" % [
+		"[PASS]" if persist_ok else "[FAIL]", save_ok, load_ok])
+
+	# --- 损坏/异常存档静默降级 → 默认全装备 ---
+	var fw := FileAccess.open(lo.save_path, FileAccess.WRITE)
+	fw.store_string("{{{not json")
+	fw.close()
+	var lo3 := SpellLoadout.new()
+	lo3.save_path = lo.save_path
+	var corrupt_ok: bool = not lo3.load() and lo3.count() == 5
+	var fw2 := FileAccess.open(lo.save_path, FileAccess.WRITE)
+	fw2.store_string(JSON.stringify({"version": 1, "equipped": ["fireball", "bogus"]}))
+	fw2.close()
+	var lo4 := SpellLoadout.new()
+	lo4.save_path = lo.save_path
+	var filter_ok: bool = lo4.load() and lo4.count() == 1 and lo4.is_equipped("fireball")
+	var fw3 := FileAccess.open(lo.save_path, FileAccess.WRITE)
+	fw3.store_string(JSON.stringify({"version": 1, "equipped": []}))
+	fw3.close()
+	var lo5 := SpellLoadout.new()
+	lo5.save_path = lo.save_path
+	var empty_ok: bool = not lo5.load() and lo5.count() == 5
+	var degrade_ok: bool = corrupt_ok and filter_ok and empty_ok
+	if degrade_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s loadout.degrade: 损坏降级=%s 未知id剔除=%s 空装备降级=%s" % [
+		"[PASS]" if degrade_ok else "[FAIL]", corrupt_ok, filter_ok, empty_ok])
+
+	# --- 施法闸①：未装备的法术画符 fizzle"未装备该法术"，不扣法力 ---
+	var lof := SpellLoadout.new()
+	lof.unequip("ice_field")
+	var c8 := {"casts": 0, "fizzles": 0, "reason": ""}
+	var fsm8 := GestureFSM.new()
+	fsm8.loadout = lof
+	fsm8.cast_performed.connect(func(_s, _a, _sc): c8.casts += 1)
+	fsm8.fizzle.connect(func(r): c8.fizzles += 1; c8.reason = r)
+	var tri8 := _make_poly([Vector2(0.5, 0.15), Vector2(0.85, 0.8), Vector2(0.15, 0.8), Vector2(0.5, 0.15)])
+	for i in range(6):
+		fsm8.update(PoseClassifier.Pose.NONE, true, tri8[0].lerp(tri8[1], i / 5.0), anchor, dt)
+	fsm8.update(PoseClassifier.Pose.PINCH, true, tri8[0], anchor, dt)
+	for i in range(1, tri8.size()):
+		fsm8.update(PoseClassifier.Pose.PINCH, true, tri8[i], anchor, dt)
+	for i in range(4):
+		fsm8.update(PoseClassifier.Pose.DRAWING, true, tri8[tri8.size() - 1], anchor, dt)
+	# 反面：装备中的法术照常施放（火球，同一 loadout）——冷却+latch 解除后画圆
+	for i in range(12):
+		fsm8.update(PoseClassifier.Pose.NONE, true, tri8[0], anchor, dt)
+	var circle8 := _make_circle(Vector2(0.5, 0.5), 0.15)
+	for i in range(6):
+		fsm8.update(PoseClassifier.Pose.NONE, true, circle8[0].lerp(circle8[1], i / 5.0), anchor, dt)
+	fsm8.update(PoseClassifier.Pose.PINCH, true, circle8[0], anchor, dt)
+	for i in range(1, circle8.size()):
+		fsm8.update(PoseClassifier.Pose.PINCH, true, circle8[i], anchor, dt)
+	for i in range(4):
+		fsm8.update(PoseClassifier.Pose.DRAWING, true, circle8[circle8.size() - 1], anchor, dt)
+	var gate_ok: bool = c8.fizzles == 1 and c8.reason == "未装备该法术" and c8.casts == 1 \
+		and is_equal_approx(fsm8.mana, GestureFSM.MANA_MAX - GestureFSM.SPELL_COST["fireball"])
+	if gate_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s loadout.gate: 未装备冰域fizzle(%s)施放=%d次 mana=%.1f（只扣火球25）" % [
+		"[PASS]" if gate_ok else "[FAIL]", c8.reason, c8.casts, fsm8.mana])
+
+	# --- 施法闸②：掌心火弹未装备时拳→张掌 fizzle；null 装备=全装备锚 ---
+	var loq := SpellLoadout.new()
+	loq.unequip("quick_shot")
+	var fsm9 := GestureFSM.new()
+	fsm9.loadout = loq
+	var q9 := {"quick": 0, "fizzles": 0, "reason": ""}
+	fsm9.quick_shot_performed.connect(func(_a): q9.quick += 1)
+	fsm9.fizzle.connect(func(r): q9.fizzles += 1; q9.reason = r)
+	fsm9.update(PoseClassifier.Pose.FIST, true, Vector2(0.5, 0.5), anchor, dt)
+	fsm9.update(PoseClassifier.Pose.PALM, true, Vector2(0.5, 0.5), anchor, dt)
+	var fsm10 := GestureFSM.new()  # 无 loadout（null 路径，旧调用方兼容锚）
+	var q10 := {"quick": 0}
+	fsm10.quick_shot_performed.connect(func(_a): q10.quick += 1)
+	fsm10.update(PoseClassifier.Pose.FIST, true, Vector2(0.5, 0.5), anchor, dt)
+	fsm10.update(PoseClassifier.Pose.PALM, true, Vector2(0.5, 0.5), anchor, dt)
+	var qs_ok: bool = q9.fizzles == 1 and q9.reason == "未装备该法术" and q9.quick == 0 and q10.quick == 1
+	if qs_ok:
+		p += 1
+	else:
+		f += 1
+	print("%s loadout.quick: 未装备掌心火弹fizzle=%s（%s），null=全装备照常=%d次" % [
+		"[PASS]" if qs_ok else "[FAIL]", q9.fizzles == 1, q9.reason, q10.quick])
 
 	return [p, f]
 

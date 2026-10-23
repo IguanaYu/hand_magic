@@ -34,6 +34,31 @@ func add_polyline_template(p_name: String, pts: Array) -> void:
 	})
 
 
+## 移除指定名的全部模板（内置+玩家录制）。扩展符文启用时用于替换三角。
+func remove_templates(p_name: String) -> void:
+	var kept: Array[Dictionary] = []
+	for t in templates:
+		if t.name == p_name:
+			continue
+		kept.append(t)
+	templates = kept
+
+
+## 扩展符文注册（仅 GestureFSM.EXTENDED_GESTURES 打开时被 GestureFSM._init 调用）：
+## S 波 ∿ 替换三角成为冰霜领域唯一符文（调研报告方案 A，启用即替换语义）。
+## 选型依据（docs/research-gesture-survey-2026-10.md §4/§5）：平滑无尖角（三角的
+## 尖角在低帧率下最易被磨圆）、开放笔画（不与圆的 circle_like 闭合度门槛竞争）、
+## 水波↔冰霜语义自洽；2 个平滑折返与 zigzag 的 2 个尖角折返在 $1 归一化后
+## 以路径形状区分（测试盯住双向不互认）。
+func register_extended_runes() -> void:
+	remove_templates("triangle")
+	var wave: Array = []
+	for i in range(13):
+		var t := float(i) / 12.0
+		wave.append(Vector2(0.08 + 0.84 * t, 0.5 - 0.30 * sin(t * PI * 3.0)))
+	add_polyline_template("wave", wave)
+
+
 ## 玩家录制样本：与内置模板同一条归一化管线，带 user 标记便于统计/清理。
 ## 圆形沿用 recognize() 里"circle_like 门槛"的既有规则，不做特殊处理。
 func add_recorded_template(p_name: String, pts: Array) -> void:

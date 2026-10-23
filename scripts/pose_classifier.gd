@@ -7,7 +7,7 @@ extends RefCounted
 ## 拳/掌/捏合判定带滞回：进入用严阈值、维持用松阈值，消除阈值边缘反复横跳。
 
 
-enum Pose { NONE, FIST, PALM, DRAWING, PINCH }
+enum Pose { NONE, FIST, PALM, DRAWING, PINCH, VICTORY, THUMB_UP, ILOVEYOU }
 
 const WRIST := 0
 const PALM_REF := 9  # 中指掌指关节
@@ -29,10 +29,17 @@ const PINCH_EXIT_VOTES := 3     # 离开捏合所需票数（进入仍需 confir
                                 # 捏合是瞬态"点击"姿势：松开时手在运动，原始姿势在
                                 # 张掌/画符/无 间闪烁，5 票全一致凑不齐 → 稳定姿势
                                 # 冻结在'捏合'（真机事故：卡死 24s + latch 静默封锁）
+const THUMB_EXT_RATIO := 1.8    # 点赞（扩展）：拇指尖-小指根距离/掌长 超此值=拇指明显
+                                # 伸直（合成手标定：拳内收 1.3~1.4，竖拇 ~2.3；真机待标定）
 
 ## 去抖票数：窗口 = confirm_frames + 2 帧内同一姿势攒够 confirm_frames 票才切换。
 ## 设为 1 表示完全去掉抖动（单测用）。
 var confirm_frames := 5
+
+## 扩展静态手形开关（GestureFSM.EXTENDED_GESTURES 的镜像，main._ready 同步）：
+## 关闭（默认）时 classify() 与旧行为逐字节等价；开启后比耶/点赞/我爱你参与
+## 判定（见 classify 内扩展块），FSM 不消费这些姿势、照旧当 NONE。
+var extended_poses := false
 
 var last_raw_pose: int = Pose.NONE   # 当帧未经去抖的原始判定（HUD 调试用）
 var last_ratios: Array[float] = []   # 最近一次四指比值（HUD 调试用）
@@ -74,6 +81,22 @@ func classify(landmarks: Array) -> int:
 		if r >= fist_threshold:
 			all_folded = false
 			break
+	# 扩展静态手形（2026-10 调研 §1.1 跨平台词表，默认关闭）：
+	# 伸直判据复用张掌进入阈值 PALM_RATIO、弯曲判据复用画符三指阈值 DRAW_FOLDED_RATIO
+	# ——与捏合/拳/掌几何上互斥（比耶/我爱你有弯指进不了张掌，伸指进不了拳），
+	# 在旧管线里这些手本来判 NONE，开启后是纯增量。点赞是拳的拇指伸直亚型
+	#（四指全卷+拇指明显伸出）：开启后点赞手不再判 FIST、不再触发聚气，预期语义。
+	# 顺序必须在拳/掌判定之前，否则会被它们吞掉。
+	if extended_poses:
+		if ratios[0] > PALM_RATIO and ratios[1] > PALM_RATIO \
+				and ratios[2] < DRAW_FOLDED_RATIO and ratios[3] < DRAW_FOLDED_RATIO:
+			return _debounce(Pose.VICTORY)
+		if ratios[0] > PALM_RATIO and ratios[3] > PALM_RATIO \
+				and ratios[1] < DRAW_FOLDED_RATIO and ratios[2] < DRAW_FOLDED_RATIO:
+			return _debounce(Pose.ILOVEYOU)
+		var thumb_ext: float = (landmarks[THUMB_TIP] - landmarks[17]).length() / palm_size
+		if all_folded and thumb_ext > THUMB_EXT_RATIO:
+			return _debounce(Pose.THUMB_UP)
 	if all_folded:
 		return _debounce(Pose.FIST)
 	if _all_above(ratios, palm_threshold):
@@ -133,4 +156,7 @@ static func pose_name(pose: int) -> String:
 		Pose.PALM: return "张掌"
 		Pose.DRAWING: return "画符"
 		Pose.PINCH: return "捏合"
+		Pose.VICTORY: return "比耶"
+		Pose.THUMB_UP: return "点赞"
+		Pose.ILOVEYOU: return "我爱你"
 		_: return "无"

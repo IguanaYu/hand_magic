@@ -31,7 +31,7 @@ func load() -> bool:
 	if typeof(data) != TYPE_DICTIONARY:
 		return false
 	for spell_id in data:
-		if GestureFSM.RUNE_TO_SPELL.values().has(spell_id) == false:
+		if GestureFSM.effective_rune_map().values().has(spell_id) == false:
 			continue
 		var arr: Array = data[spell_id]
 		if typeof(arr) != TYPE_ARRAY:
@@ -92,10 +92,13 @@ func all_counts() -> Dictionary:
 	return out
 
 
-## spell_id → 符文名（fireball→circle），面板与识别器注入共用
+## spell_id → 符文名（fireball→circle），面板与识别器注入共用。
+## 走 GestureFSM.effective_rune_map()：扩展开启时 ice_field 反查得 "wave"，
+## 关闭时得 "triangle"——所有样本注入点（main/录制面板）经此单点自动跟随开关。
 static func rune_of(spell_id: String) -> String:
-	for rune_name in GestureFSM.RUNE_TO_SPELL:
-		if GestureFSM.RUNE_TO_SPELL[rune_name] == spell_id:
+	var rune_map: Dictionary = GestureFSM.effective_rune_map()
+	for rune_name in rune_map:
+		if rune_map[rune_name] == spell_id:
 			return rune_name
 	return ""
 

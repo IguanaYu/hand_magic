@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手势施法图鉴 · 手部骨架版</title>
+<style>
+  :root {
+    --bg: #0b1220;
+    --panel: #121c30;
+    --panel2: #0e1728;
+    --line: #223154;
+    --text: #e7edf6;
+    --muted: #8fa3c0;
+    --bone: #3ee08c;
+    --dot: #ff5d5d;
+    --tip: #ffd23e;
+    --cyan: #6fd8ff;
+    --good: #3ee08c;
+    --mid: #ffc94d;
+    --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.55;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .legend { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .badge { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; line-height: 1.7; }
+  .b-good { color: var(--good); background: rgba(62,224,140,.13); }
+  .b-mid  { color: var(--mid);  background: rgba(255,201,77,.13); }
+  .b-bad  { color: var(--bad);  background: rgba(255,107,107,.13); }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tab {
+    appearance: none; border: 1px solid var(--line); background: var(--panel);
+    color: var(--muted); font: inherit; padding: 8px 18px; border-radius: 999px; cursor: pointer;
+  }
+  .tab.on { background: #1b2a49; color: var(--text); border-color: #33507f; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .stage { background: var(--panel2); border: 1px solid #182643; border-radius: 10px; overflow: hidden; }
+  .name { font-weight: 600; }
+  .name .en { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .who { color: var(--muted); font-size: 12px; }
+  .note { font-size: 12px; }
+  .proj { font-size: 12px; color: var(--cyan); }
+  .sect { margin: 26px 0 10px; font-size: 15px; color: var(--muted); font-weight: 600; }
+  .foot { margin-top: 34px; color: var(--muted); font-size: 12px; }
+
+  /* 手部骨架：MediaPipe 风格（绿骨 + 红点 + 黄色指尖） */
+  .hand line { stroke: var(--bone); stroke-width: 2.6; stroke-linecap: round; }
+  .hand .dot { fill: var(--dot); }
+  .hand .tip { fill: var(--tip); }
+  .hand .palm { fill: rgba(255,255,255,.045); }
+
+  /* 动作演示 */
+  .flow { fill: none; stroke: var(--cyan); stroke-width: 2.4; stroke-linecap: round; stroke-dasharray: 5 7; animation: dash 1.1s linear infinite; }
+  .flowhead { fill: var(--cyan); }
+  .dome { fill: rgba(111,216,255,.10); stroke: rgba(111,216,255,.75); stroke-width: 2; }
+  .pulse { fill: none; stroke: var(--tip); stroke-width: 2; animation: pulse 1.6s ease-in-out infinite; }
+  .spark { stroke: var(--tip); stroke-width: 2.4; stroke-linecap: round; animation: blink 1.1s steps(2) infinite; }
+  .rise { animation: rise 2.4s ease-in-out infinite; }
+  .clapL { animation: clapL 2.2s ease-in-out infinite; }
+  .clapR { animation: clapR 2.2s ease-in-out infinite; }
+  @keyframes dash { to { stroke-dashoffset: -24; } }
+  @keyframes pulse { 0%,100% { opacity: .15; } 50% { opacity: .9; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes rise { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes clapL { 0%,35% { transform: translate(0,0); } 55%,100% { transform: translate(16px,0); } }
+  @keyframes clapR { 0%,35% { transform: translate(0,0); } 55%,100% { transform: translate(-16px,0); } }
+
+  /* 画符：轨迹 + 指尖动点 */
+  .stroke-base { fill: none; stroke: rgba(111,216,255,.30); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; }
+  .stroke-draw { fill: none; stroke: var(--cyan); stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 100; stroke-dashoffset: 100; animation: redraw 3s ease-in-out infinite; }
+  .finger { fill: var(--tip); }
+  @keyframes redraw { 0% { stroke-dashoffset: 100; } 55%,100% { stroke-dashoffset: 0; } }
+
+  .panel.hidden { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .flow, .pulse, .spark, .rise, .clapL, .clapR, .stroke-draw, .finger animateMotion { animation: none !important; }
+    .stroke-draw { stroke-dashoffset: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>手势施法图鉴 · 手部骨架版</h1>
+  <p class="sub">骨架为 MediaPipe 21 关节点风格渲染（绿色=骨骼连线，红色=关节，黄色=指尖）。三类手势：静态手形 / 动态动作 / 空中画符。</p>
+  <div class="legend">
+    <span class="badge b-good">极稳 / 稳</span>
+    <span class="badge b-mid">较稳</span>
+    <span class="badge b-bad">易翻车 · 避免</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-panel="p-pose">静态手形 · 9</button>
+    <button class="tab" data-panel="p-motion">动态动作 · 8</button>
+    <button class="tab" data-panel="p-stroke">空中画符 · 14</button>
+  </div>
+
+  <div class="panel" id="p-pose"><div class="grid" id="pose-grid"></div></div>
+
+  <div class="panel hidden" id="p-motion">
+    <div class="grid" id="motion-grid"></div>
+  </div>
+
+  <div class="panel hidden" id="p-stroke">
+    <div class="sect">本项目现用 / 候选</div>
+    <div class="grid" id="stroke-ours"></div>
+    <div class="sect">经典游戏形状库</div>
+    <div class="grid" id="stroke-classic"></div>
+    <p class="foot">$1 识别器原始 16 模板：triangle · x · rectangle · circle · check · caret · zigzag · arrow · [ · ] · v · delete · { · } · star · pigtail（Wobbrock et al. UIST 2007）</p>
+  </div>
+
+  <p class="foot">依据 docs/research-gesture-survey-2026-10.md 调研整理（2026-10） · 骨架为示意性关节摆位，非逐帧动捕数据</p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- MediaPipe 21 关节骨架 ---------------- */
+  // 关节编号：0腕；1-4拇指；5-8食指；9-12中指；13-16无名指；17-20小指
+  var BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+               [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  var TIPS = [4, 8, 12, 16, 20];
+
+  // 共享关节位（右手，掌心朝屏，拇指在左），坐标 viewBox 0 0 100 112
+  var WRIST = [50, 100], MCP = { i: [36,48], m: [50,44], r: [63,47], p: [74,53] };
+  var THUMB_EXT = [[36,82],[29.1,72.2],[25.7,62.8],[24.2,53.9]];   // 拇指伸展（左上）
+  var THUMB_TUCK = [[36,82],[33.9,70.2],[38.9,61.5],[47.8,59.9]];  // 拇指内收搭在指上
+  var THUMB_UP  = [[36,82],[33,70],[31,60],[30,49]];               // 拇指竖起
+  var I_EXT = [[35.5,34],[35.2,25],[35,18]];
+  var M_EXT = [[50,29],[50,19],[50,11]];
+  var R_EXT = [[63.5,33],[63.8,24],[64,17]];
+  var P_EXT = [[75.3,42.1],[76.2,35.1],[76.9,29.1]];
+  var I_CURL = [[29,35.9],[21.6,41.1],[18.1,47.1]];   // 四指全钩（握拳位）
+  var M_CURL = [[43,30.8],[34.6,36.2],[30.4,43]];
+  var R_CURL = [[57.3,35.3],[49.6,39.9],[45.7,45.7]];
+  var P_CURL = [[70.1,42.7],[63.8,45.8],[60,50.5]];
+  var I_V = [[33.6,34.2],[32,25.4],[31.9,18.4]];      // 比耶：食指左倾
+  var M_V = [[53.1,29.3],[55.2,19.5],[56.6,11.7]];    // 比耶：中指右倾
+  var I_PINCH = [[32.9,36.5],[25.25,36.5],[20.4,39.9]];  // 食指半钩与拇指相触
+  var T_PINCH = [[33,74],[26,62],[22,51],[20.8,40.2]];   // 拇指对掌
+  var M_OK = [[47.4,29.2],[40.6,21.9],[34.3,17]];     // OK：中指/无名指/小指放松微弯
+  var R_OK = [[61.5,34.1],[55.7,27.2],[50.4,22.6]];
+  var P_OK = [[73.5,42],[69.4,36.3],[65.2,32]];
+  var M_MP = [[46.1,29.5],[36.1,29.5],[29.6,34.1]];   // 中指捏合：中指半钩
+  var T_MP = [[33,72],[28,61],[28.5,48],[29.8,34.9]];
+
+  function pose(thumb, idx, mid, rng, pnk) {
+    return [WRIST].concat(thumb, [MCP.i], idx, [MCP.m], mid, [MCP.r], rng, [MCP.p], pnk);
+  }
+  var POSES = {
+    open:        pose(THUMB_EXT, I_EXT, M_EXT, R_EXT, P_EXT),
+    fist:        pose(THUMB_TUCK, I_CURL, M_CURL, R_CURL, P_CURL),
+    pinch:       pose(T_PINCH, I_PINCH, M_EXT, R_EXT, P_EXT),
+    point:       pose(THUMB_TUCK, I_EXT, M_CURL, R_CURL, P_CURL),
+    victory:     pose(THUMB_TUCK, I_V, M_V, R_CURL, P_CURL),
+    thumbup:     pose(THUMB_UP, I_CURL, M_CURL, R_CURL, P_CURL),
+    ok:          pose(T_PINCH, I_PINCH, M_OK, R_OK, P_OK),
+    iloveyou:    pose(THUMB_EXT, I_EXT, M_CURL, R_CURL, P_EXT),
+    middlepinch: pose(T_MP, I_EXT, M_MP, R_CURL, P_CURL)
+  };
+
+  function handMarkup(pts) {
+    var s = '';
+    s += '<polygon class="palm" points="' +
+      [pts[0], pts[1], pts[5], pts[9], pts[13], pts[17]].map(function (p) { return p[0] + ',' + p[1]; }).join(' ') + '"/>';
+    BONES.forEach(function (b) {
+      s += '<line x1="' + pts[b[0]][0] + '" y1="' + pts[b[0]][1] + '" x2="' + pts[b[1]][0] + '" y2="' + pts[b[1]][1] + '"/>';
+    });
+    pts.forEach(function (p, i) {
+      s += '<circle class="' + (TIPS.indexOf(i) >= 0 ? 'tip' : 'dot') + '" cx="' + p[0] + '" cy="' + p[1] + '" r="' + (TIPS.indexOf(i) >= 0 ? 3.2 : 2.3) + '"/>';
+    });
+    return s;
+  }
+  function handSVG(key) {
+    return '<svg class="hand" viewBox="0 0 100 112" role="img" aria-label="手部骨架">' + handMarkup(POSES[key]) + '</svg>';
+  }
+  function handGroup(key, tx, ty, sc, cls) {
+    return '<g class="hand ' + (cls || '') + '" transform="translate(' + tx + ',' + ty + ') scale(' + sc + ')">' + handMarkup(POSES[key]) + '</g>';
+  }
+
+  /* ---------------- 静态手形数据 ---------------- */
+  var POSE_CARDS = [
+    { k: 'pinch', name: '捏合', en: 'Pinch', b: ['极稳', 'good'], who: 'Meta / Apple / Ultraleap 核心选择原语；官方姿势=捏合时其余手指放松伸展', proj: '✅ 本项目：画符起笔' },
+    { k: 'fist', name: '握拳', en: 'Closed Fist', b: ['极稳', 'good'], who: 'MediaPipe 内置 Closed_Fist · 聚气 / 抓握', proj: '✅ 本项目：聚气 · 收笔' },
+    { k: 'open', name: '张掌', en: 'Open Palm', b: ['稳', 'good'], who: 'MediaPipe 内置 Open_Palm · 推出 / 菜单 / 护盾（纯触发易误触，宜两段式）', proj: '✅ 本项目：护盾 · 掌心火弹' },
+    { k: 'point', name: '指点', en: 'Pointing Up', b: ['稳', 'good'], who: 'MediaPipe 内置 · 瞄准（Meta 官方：食指是最可靠的手指）', proj: '○ 空位' },
+    { k: 'victory', name: '比耶', en: 'Victory', b: ['稳', 'good'], who: 'MediaPipe 内置', proj: '○ 空位 · GDD §4.2 规划＝分裂' },
+    { k: 'thumbup', name: '点赞', en: 'Thumb Up', b: ['稳', 'good'], who: 'MediaPipe 内置 · Ultraleap 用于确认', proj: '○ 空位' },
+    { k: 'ok', name: 'OK 环', en: 'OK', b: ['较稳', 'mid'], who: '常见自定义手形', proj: '○ 空位' },
+    { k: 'iloveyou', name: '我爱你', en: 'ILoveYou', b: ['较稳', 'mid'], who: 'MediaPipe 内置（拇指＋食指＋小指）', proj: '○ 空位' },
+    { k: 'middlepinch', name: '中指捏合', en: 'Middle-finger Pinch', b: ['避免', 'bad'], who: '各平台官方均未采用（一律食指捏合）', proj: '✕ 不建议' }
+  ];
+  var poseGrid = document.getElementById('pose-grid');
+  POSE_CARDS.forEach(function (p) {
+    poseGrid.insertAdjacentHTML('beforeend',
+      '<div class="card"><div class="stage">' + handSVG(p.k) + '</div>' +
+      '<div class="name">' + p.name + ' <span class="en">' + p.en + '</span></div>' +
+      '<span class="badge b-' + p.b[1] + '">' + p.b[0] + '</span>' +
+      '<div class="who">' + p.who + '</div>' +
+      '<div class="proj">' + p.proj + '</div></div>');
+  });
+
+  /* ---------------- 动态动作（骨架 + 轨迹箭头） ---------------- */
+  var AH = '<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="flowhead"/></marker></defs>';
+  var SCENES = {
+    fistpalm: AH + handGroup('fist', 4, 10, 0.78) + handGroup('open', 104, 10, 0.78) +
+      '<circle class="pulse" cx="41" cy="55" r="24"/>' +
+      '<path class="flow" d="M84,62 L102,62" marker-end="url(#ah)"/>',
+    throw: AH + handGroup('fist', 10, 12, 0.8) +
+      '<path class="flow" d="M96,70 Q130,14 168,40" marker-end="url(#ah)"/>' +
+      '<g class="spark"><line x1="176" y1="30" x2="182" y2="24"/><line x1="180" y1="42" x2="188" y2="42"/><line x1="176" y1="52" x2="183" y2="57"/></g>',
+    flick: AH + handGroup('open', 22, 10, 0.8) +
+      '<path class="flow" d="M136,88 A30,30 0 1,1 166,50" marker-end="url(#ah)"/>',
+    push: AH + handGroup('open', 10, 10, 0.8) +
+      '<path class="flow" d="M96,60 L164,60" marker-end="url(#ah)"/>',
+    fistsup: AH + '<g class="rise">' + handGroup('fist', 62, 24, 0.8) + '</g>' +
+      '<path class="dome" d="M64,38 Q103,0 142,38"/>',
+    wiggle: AH + handGroup('open', 18, 10, 0.8) +
+      '<path class="flow" d="M134,24 L176,16" marker-start="url(#ah)" marker-end="url(#ah)"/>',
+    clap: AH + '<g class="clapL">' + handGroup('open', 2, 14, 0.72) + '</g>' +
+      '<g class="clapR"><g class="hand" transform="translate(200,14) scale(-0.72,0.72)">' + handMarkup(POSES.open) + '</g></g>' +
+      '<g class="spark"><line x1="96" y1="34" x2="90" y2="28"/><line x1="102" y1="30" x2="102" y2="22"/><line x1="108" y1="34" x2="114" y2="28"/></g>',
+    snap: AH + handGroup('pinch', 24, 10, 0.8) +
+      '<g class="spark"><line x1="52" y1="34" x2="56" y2="26"/><line x1="58" y1="42" x2="67" y2="40"/><line x1="52" y1="50" x2="57" y2="57"/></g>'
+  };
+  var MOTION_CARDS = [
+    { id: 'fistpalm', name: '蓄能 → 释放', en: 'Fist → Palm', b: ['极稳', 'good'], who: 'Masters of Light · I\'m Wizard', note: '2024-26 新品主流两段式，防误触；本项目掌心火弹同款 ✅' },
+    { id: 'throw', name: '挥臂投掷', en: 'Throw', b: ['稳', 'good'], who: 'The Unspoken · The Mage\'s Tale · I\'m Wizard', note: 'Unspoken 放弃物理精确投掷，改「超自然瞄准辅助」' },
+    { id: 'flick', name: '甩腕', en: 'Wrist Flick', b: ['稳', 'good'], who: 'Sorcery · The Unspoken 召唤', note: '方向判定类——2012 体感三连中唯一口碑存活的识别方式' },
+    { id: 'push', name: '猛推', en: 'Push', b: ['稳', 'good'], who: 'Fable: The Journey · First Hand', note: '方向判定，简单直接' },
+    { id: 'fistsup', name: '双拳举盾', en: 'Fists Up', b: ['稳', 'good'], who: 'First Hand 护盾', note: '大动作、易识别（图中为单手示意）' },
+    { id: 'wiggle', name: '手指摆动', en: 'Wiggle', b: ['较稳', 'mid'], who: 'Waltz of the Wizard 施法', note: '精度要求低、动作幅度小' },
+    { id: 'clap', name: '拍手', en: 'Clap', b: ['易翻车', 'bad'], who: 'Waltz 震慑 · I\'m Wizard 冲击波', note: '双手重叠 → 摄像头丢一只手' },
+    { id: 'snap', name: '响指', en: 'Snap', b: ['易翻车', 'bad'], who: 'Waltz of the Wizard 召唤', note: '官方定义「中指弹拇指」，玩家本能用食指——社区第一高频失败' }
+  ];
+  var motionGrid = document.getElementById('motion-grid');
+  MOTION_CARDS.forEach(function (m) {
+    motionGrid.insertAdjacentHTML('beforeend',
+      '<div class="card"><div class="stage"><svg viewBox="0 0 200 112" role="img" aria-label="' + m.name + '动作示意">' + SCENES[m.id] + '</svg></div>' +
+      '<div class="name">' + m.name + ' <span class="en">' + m.en + '</span></div>' +
+      '<span class="badge b-' + m.b[1] + '">' + m.b[0] + '</span>' +
+      '<div class="who">' + m.who + '</div>' +
+      '<div class="note">' + m.note + '</div></div>');
+  });
+
+  /* ---------------- 空中画符（轨迹 + 指尖动点） ---------------- */
+  var STROKES_OURS = [
+    { name: '圆 ◯', en: 'circle', spell: '本项目 · 火球', b: ['中风险', 'mid'], note: '0 尖角 · 闭合；大神玩家抱怨「画太大不识别」；↔三角互为混淆对', d: 'M15,50 a35,35 0 1,1 70,0 a35,35 0 1,1 -70,0' },
+    { name: 'Z 字 ⚡', en: 'zigzag', spell: '本项目 · 链电', b: ['低风险', 'good'], note: '2 尖角 · 开放折线', d: 'M15,25 L85,25 L15,75 L85,75' },
+    { name: '三角 △', en: 'triangle', spell: '本项目 · 冰霜', b: ['高风险', 'bad'], note: '3 尖角 · 闭合；尖角最易被低帧率磨圆；与圆互为混淆对（ICMI 2014）；史上无画符游戏采用', d: 'M50,15 L88,85 L12,85 L50,15' },
+    { name: '斜线 ╱', en: 'slash', spell: '本项目 · 风刃', b: ['低风险', 'good'], note: '0 尖角 · 开放；画得最快', d: 'M20,80 L80,20' },
+    { name: 'S 波 〜', en: 'wave', spell: '冰霜候选（替换三角）', b: ['低风险', 'good'], note: '0 尖角 · 开放；水波↔冰霜语义自洽，估时约 1.0s', d: 'M10,50 Q22.5,15 35,50 T60,50 T85,50' }
+  ];
+  var STROKES_CLASSIC = [
+    { name: 'V 字', spell: '恶魔城 · 封印 1', b: ['低风险', 'good'], note: '2 尖角 · 开放——史上最简单封印是 V 不是三角', d: 'M22,25 L50,75 L78,25' },
+    { name: 'N 形', spell: 'Black & White · 食物', b: ['低风险', 'good'], note: '3 尖角 · 开放折线', d: 'M22,78 L22,25 L72,78 L72,25' },
+    { name: '心形', spell: 'Black & White · 治疗', b: ['中风险', 'mid'], note: '闭合 · 双弧，无尖角', d: 'M50,32 C46,16 22,16 22,38 C22,58 42,66 50,82 C58,66 78,58 78,38 C78,16 54,16 50,32' },
+    { name: '螺旋', spell: 'B&W 手势模式 · 传送', b: ['中风险', 'mid'], note: 'B&W 先画螺旋进入手势模式，再画具体神迹符号', d: 'M54,50 a5,5 0 0,1 10,0 a10,10 0 0,1 -20,0 a16,16 0 0,1 31,-1 a23,23 0 0,1 -45,4 a30,30 0 0,1 58,-8' },
+    { name: '月牙', spell: '大神 · 弓月', b: ['低风险', 'good'], note: '开放弧线；GDD 五角星陨石的建议替代形', d: 'M46,12 a40,40 0 1,0 0,76 a60,60 0 0,1 0,-76' },
+    { name: '盘旋圈', spell: '大神 · 旋风', b: ['中风险', 'mid'], note: '环绕笔画，闭合度介于圆与螺旋之间', d: 'M30,55 a22,22 0 1,1 40,10 a16,16 0 1,1 -30,-6 a11,11 0 1,1 20,-2' },
+    { name: '圆＋引线', spell: '大神 · 樱花爆弹', b: ['低风险', 'good'], note: '倒 Q 形：闭合圆＋甩出的引线，与纯圆天然区分', d: 'M42,22 a21,21 0 1,0 0.1,0 M56,58 L84,86' },
+    { name: '五角星 ★', spell: '$1 模板 · GDD 规划陨石', b: ['极高风险', 'bad'], note: '5 尖角 · 闭合 · 笔画交叉——比三角更深的坑，建议改月牙', d: 'M50,13 L57.6,34.5 L80.4,35.1 L62.4,49 L68.8,70.9 L50,58 L31.2,70.9 L37.6,49 L19.6,35.1 L42.4,34.5 Z' },
+    { name: '猪尾巴', spell: '$1 模板', b: ['中风险', 'mid'], note: '环＋尾笔画', d: 'M66,14 C36,18 28,44 50,50 C72,56 70,30 50,36 C30,42 32,68 46,86' }
+  ];
+  function strokeSVG(s) {
+    return '<svg viewBox="0 0 100 100" role="img" aria-label="' + s.name + '笔画">' +
+      '<path class="stroke-base" d="' + s.d + '"/>' +
+      '<path class="stroke-draw" d="' + s.d + '" pathLength="100"/>' +
+      '<circle class="finger" r="4"><animateMotion dur="3s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;0.55;1" calcMode="linear" path="' + s.d + '"/></circle>' +
+      '</svg>';
+  }
+  function fillStrokes(listId, data) {
+    var grid = document.getElementById(listId);
+    data.forEach(function (s) {
+      grid.insertAdjacentHTML('beforeend',
+        '<div class="card"><div class="stage">' + strokeSVG(s) + '</div>' +
+        '<div class="name">' + s.name + (s.en ? ' <span class="en">' + s.en + '</span>' : '') + '</div>' +
+        '<span class="badge b-' + s.b[1] + '">' + s.b[0] + '</span>' +
+        '<div class="who">' + s.spell + '</div>' +
+        '<div class="note">' + s.note + '</div></div>');
+    });
+  }
+  fillStrokes('stroke-ours', STROKES_OURS);
+  fillStrokes('stroke-classic', STROKES_CLASSIC);
+
+  /* ---------------- 标签页 ---------------- */
+  var tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) { x.classList.remove('on'); });
+      t.classList.add('on');
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.add('hidden'); });
+      document.getElementById(t.getAttribute('data-panel')).classList.remove('hidden');
+    });
+  });
+})();
+</script>
+</body>
+</html>

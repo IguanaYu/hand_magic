@@ -56,6 +56,8 @@ var spawning := true
 var shield_up := false
 ## 测试钩子：无视手势强制开盾
 var shield_force := false
+## 玩家装备配置（main 注入）；null = 全装备
+var loadout: SpellLoadout = null
 var mana_ratio := 0.0:
 	set(v):
 		mana_ratio = v
@@ -268,6 +270,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_over:
 		return
 	if event is InputEventKey and event.pressed and SPELL_KEYS.has(event.keycode):
+		# 装备闸：配置面板（C）勾掉的法术数字键直放同样无效（与 FSM 画符路径同规则）
+		if loadout != null and not loadout.is_equipped(SPELL_KEYS[event.keycode]):
+			return
 		spell_caster.cast(SPELL_KEYS[event.keycode], get_viewport().get_mouse_position())
 		spell_bar.flash(event.keycode)
 		cast_banner.pop(GestureFSM.SPELL_NAME.get(SPELL_KEYS[event.keycode], ""),

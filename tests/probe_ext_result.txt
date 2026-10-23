@@ -1,0 +1,11 @@
+--- EXTENDED recognizer (wave in, triangle out) ---
+expect=wave got=wave score=0.992
+expect=wave got=wave score=0.992
+expect=zigzag got=zigzag score=0.946
+expect=zigzag got=zigzag score=0.956
+expect=triangle got=wave score=0.887
+expect=circle got=circle score=0.998
+expect=slash got=slash score=1.000
+wave wobbled+rot15 got=wave score=0.979
+--- DEFAULT recognizer ---
+wave got=triangle score=0.885
