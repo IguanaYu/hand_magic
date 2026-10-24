@@ -29,8 +29,10 @@
 | **空闲持续张掌 ≥0.3s** | 魔法护盾（挡正面子弹，耗蓝 12/s，空蓝破碎） |
 | 鼠标左键按住 | 无摄像头兜底：按住=聚气/画符，松开=施放 |
 | 鼠标右键按住 | 护盾兜底 |
-| 键盘 1-5 | 直放法术（瞄准=鼠标位置，底部法术栏有键位/手势速查） |
-| **H / Tab** | **手势图鉴**：每个法术怎么画（手势图+起笔点），打开时自动暂停 |
+| 键盘 1-5 | 直放法术（瞄准=鼠标位置，底部法术栏有键位/手势速查；**未装备的法术无效**） |
+| **H / Tab** | **手势图鉴**：两页——符文法术（手势图+起笔点）+ 手势骨架（21 关节手形），←/→ 切页，打开时自动暂停 |
+| **C** | **法术配置**：勾选要用的法术（最多同时 5 个，暂定），未勾选无法施放（画符/掌心火弹/数字键全拦），关闭自动存档 |
+| G | 手势录制：录制你自己的画符样本（不录也能玩） |
 | R / F1 / ESC | 重开 / 调试 HUD / 退出 |
 
 瞄准 = 手掌/鼠标位置 → 相机射线 → 辅助命中球（远距离更宽松）+ 地面落点。
@@ -50,13 +52,26 @@
 ```bash
 G="Godot_v4.6.1-stable_win64_console.exe"
 "$G" --headless --path E:\godot\magic -- --anim-probe        # GLB 动画资产（marine/marauder×3段）
-"$G" --headless --path E:\godot\magic -- --battle3d-test     # 3D 战场 20 项断言
-"$G" --headless --path E:\godot\magic -- --smoke-test        # M0 冒烟 14 项
-"$G" --headless --path E:\godot\magic -- --e2e-test          # M0 端到端 35 项
+"$G" --headless --path E:\godot\magic -- --battle3d-test     # 3D 战场 60 项断言
+"$G" --headless --path E:\godot\magic -- --mario-test        # 马里奥换皮战场 34 项
+"$G" --headless --path E:\godot\magic -- --smoke-test        # 算法冒烟 59 项（识别器/姿势/FSM/装备/扩展手势）
+"$G" --headless --path E:\godot\magic -- --e2e-test          # 端到端 35 项
+"$G" --headless --path E:\godot\magic -- --robust-test       # 识别鲁棒性基准
 "$G" --headless --path E:\godot\magic -- --game-test         # 旧守卫法阵 9 项（--ward 进入游戏）
+# 界面目检截图（带窗口）：--shot3d --codex / --codex-page=1 / --loadout
 ```
 
-**当前状态（2026-10-06）**：battle3d 31/31 ✓、smoke 14/14 ✓、e2e 35/35 ✓、game 9/9 ✓、robust PASS ✓、anim-probe PASS ✓、带窗口零脚本错误（`--shot3d` 实拍验证）。
+**当前状态（2026-10-24）**：battle3d 60 ✓、mario 34 ✓、smoke 59 ✓、e2e 35 ✓、game 9 ✓、robust PASS ✓、带窗口零脚本错误（`--shot3d` 实拍验证）。
+
+## 文档索引
+
+- `docs/gdd-runehand-v0.1.md` — 设计文档（GDD，含 §3.3.1 扩展手势、§4.1.1 法术装备栏）
+- `docs/research-gesture-survey-2026-10.md` — 手势调研报告（VR/体感/画符游戏 × 学术证据，扩展手势选型依据）
+- `docs/gesture-gallery.html` — 手势图鉴网页版（三类手势骨架/动画/画符，浏览器直接打开）
+- `docs/spell-ui-gallery.html` — 法术界面实机截图展示页（配置面板/图鉴两页）
+- `docs/todo-manual-test.md` — **真人测试清单（法术装备/图鉴/扩展手势，含开关方法）**
+- `docs/m1-plan.md` + `docs/m1-0 ~ m1-6` — M1 里程碑系列
+- `docs/deploy-raspberry-pi.md` / `docs/plan-pi-remote-tracker.md` — 树莓派部署与远程识别
 
 ## 工程结构（M1 新增）
 
@@ -73,7 +88,12 @@ scripts/battle3d/
   crosshair.gd        准星（命中敌人变红）
   damage_label.gd     伤害飘字（弹出缩放）
   sfx_kit.gd          程序化音效合成（无音频素材，PCM 运行时生成并缓存）
-scripts/（M0 手势管线，未改动）
+  spell_bar.gd        底部法术栏（未装备槽位压暗）
+  codex_panel.gd      手势图鉴（两页：符文法术 / 手势骨架 21 关节）
+  spell_codex.gd      法术图鉴数据（单一数据源：键位/形状/文案）
+scripts/spell_loadout.gd        法术装备数据 + JSON 持久化（上限 5 暂定）
+scripts/spell_loadout_panel.gd  法术配置面板（C 键勾选）
+scripts/（M0 手势管线：pose_classifier/gesture_fsm/dollar_recognizer/rune_samples）
 ```
 
 ## M1.6 打磨（2026-10-06）
